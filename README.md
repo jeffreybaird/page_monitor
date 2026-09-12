@@ -32,8 +32,11 @@ page; cancel and restart any active element picker on the target page.
    or delete a monitor from the side panel. Resuming starts its chosen duration anew.
 
 Existing matching tabs are read without reloading, including tabs in other normal
-windows. If several match, an active tab is preferred. A sleeping/loading tab is
-reported as unavailable rather than reloaded. When no matching tab exists, the
+windows. If several match, a usable tab is preferred,
+then an active tab. A loading tab can be read as soon as its selected content exists,
+without waiting for unrelated resources. A tab discarded by Chrome Memory Saver
+must be opened manually to resume open-tab checks, or closed to allow background
+checks; the extension never wakes or reloads it. When no matching tab exists, the
 extension fetches the URL with browser session cookies. It does **not** create
 background tabs. Clicking a notification intentionally opens/focuses its page.
 

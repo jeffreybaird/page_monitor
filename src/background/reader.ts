@@ -10,16 +10,22 @@ export async function readRegion(
   const tabs = await chrome.tabs.query({ url: originPattern(m.url) });
   const matching = tabs
     .filter((t) => t.url === m.url && !t.incognito)
-    .sort((a, b) => Number(b.active) - Number(a.active));
+    .sort(
+      (a, b) =>
+        Number(!!a.discarded) - Number(!!b.discarded) ||
+        Number(b.active) - Number(a.active),
+    );
   const existing = matching[0];
   if (existing) {
-    if (existing.discarded || existing.status !== 'complete')
+    if (existing.discarded)
       throw new Error(
-        'The existing tab is sleeping or loading. Open it to resume checks; it will not be reloaded.',
+        'Chrome unloaded this tab to save memory. Activate it to resume tab checks, or close it to allow background checks. Page Monitor will not reload it.',
       );
     if (existing.id === undefined) throw new Error('The tab is unavailable.');
     const results = await chrome.scripting.executeScript({
       target: { tabId: existing.id },
+      // A page can have readable content while slow assets keep it loading.
+      injectImmediately: true,
       func: extractRegion,
       args: [m.selector, m.url],
     });

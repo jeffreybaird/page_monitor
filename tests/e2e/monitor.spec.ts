@@ -47,7 +47,7 @@ test.beforeEach(async () => {
       'cache-control': 'no-store',
     });
     res.end(
-      `<!doctype html><html lang="en"><head><title>Fixture dashboard</title></head><body><h1>Fixture dashboard</h1><section aria-label="Last 15 minutes"><p id="price">${price}</p></section><button onclick="document.getElementById('price').textContent='39'">Change live price</button><a href="/different">Navigate away</a></body></html>`,
+      `<!doctype html><html lang="en"><head><title>Fixture dashboard</title></head><body>${req.url === '/loading' ? '<img src="/slow-image" alt="Loading fixture">' : ''}<h1>Fixture dashboard</h1><section aria-label="Last 15 minutes"><p id="price">${price}</p></section><button onclick="document.getElementById('price').textContent='39'">Change live price</button><a href="/different">Navigate away</a></body></html>`,
     );
   });
   await new Promise<void>((done) => server.listen(0, '127.0.0.1', done));
@@ -751,4 +751,39 @@ test('unavailable sandboxed frames and malformed paths cannot produce a preview 
     ).rejects.toThrow();
   }
   expect((await rpc({ type: 'list' })).monitors).toHaveLength(0);
+});
+
+test('reads a rendered region while an unrelated resource keeps its tab loading', async () => {
+  const page = await context.newPage();
+  let release: () => void = () => {};
+  const blocked = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  await page.route('**/slow-image', async (route) => {
+    await blocked;
+    await route.abort();
+  });
+  try {
+    await page.goto(`${base}/loading`, { waitUntil: 'domcontentloaded' });
+    await expect
+      .poll(() =>
+        panel.evaluate(
+          async (url) => (await chrome.tabs.query({ url }))[0]?.status,
+          `${base}/loading`,
+        ),
+      )
+      .toBe('loading');
+    const before = requests;
+    const preview = await rpc({
+      type: 'test-selector',
+      url: `${base}/loading`,
+      selector: '#price',
+    });
+    expect(preview.preview).toMatchObject({ text: '40', source: 'tab' });
+    expect(requests).toBe(before);
+    expect(await page.evaluate(() => document.readyState)).not.toBe('complete');
+  } finally {
+    release();
+    await page.close();
+  }
 });
