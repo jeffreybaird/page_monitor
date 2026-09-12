@@ -1,6 +1,11 @@
 import './style.css';
 import { textDiff } from './diff';
 import {
+  readEditorDraft,
+  saveEditorDraft,
+  type EditorDraft,
+} from './editor-draft';
+import {
   inputValid,
   originPattern,
   webUrl,
@@ -116,6 +121,7 @@ units.addEventListener('change', () => {
     interval.value = interval.min;
 });
 const sample = el('p', 'Select a region to preview its text.', 'preview');
+sample.setAttribute('aria-label', 'Selected text preview');
 let previewGeneration = 0;
 const selectorStatus = el(
   'p',
@@ -140,6 +146,54 @@ let editingId: string | null = null;
 let draftKey = '';
 let monitors: Monitor[] = [];
 let busy = false;
+let editorTouched = false;
+let editorRestoring = true;
+let editorVersion = 0;
+const editorWindow = chrome.windows.getCurrent().then((window) => {
+  if (window.id === undefined)
+    throw new Error('Cannot restore the draft without a browser window.');
+  return window.id;
+});
+const editorStatus = el('p', '', 'hint');
+editorStatus.setAttribute('aria-label', 'Editor draft status');
+function editorValue(): EditorDraft {
+  return {
+    editingId,
+    name: name.value,
+    url: url.value,
+    selector: selector.value,
+    interval: interval.value,
+    units: units.value,
+    durationMode: durationMode.value,
+    duration: duration.value,
+    renderJavaScript: renderJavaScript.checked,
+  };
+}
+async function storeEditor(value: EditorDraft | null): Promise<boolean> {
+  const version = ++editorVersion;
+  try {
+    await saveEditorDraft(await editorWindow, value);
+    if (version === editorVersion) {
+      editorStatus.textContent = value
+        ? 'Draft saved for this browser session.'
+        : '';
+      editorStatus.classList.remove('error');
+    }
+    return true;
+  } catch (error) {
+    if (version === editorVersion) {
+      editorStatus.textContent = `Draft not saved: ${error instanceof Error ? error.message : 'Storage is unavailable.'}`;
+      editorStatus.classList.add('error');
+    }
+    return false;
+  }
+}
+function rememberEditor(): void {
+  if (busy) return;
+  editorTouched = true;
+  void storeEditor(editorValue());
+}
+
 let checkingId: string | null = null;
 let viewVersion = 0;
 const pendingActions = new Map<string, string>();
@@ -198,6 +252,7 @@ form.append(
   field('Monitor for', durationMode),
   durationField,
   editWarning,
+  editorStatus,
   actions,
 );
 let initialized = false;
@@ -205,6 +260,10 @@ const newMonitor = button(
   'New monitor',
   () => {
     if (busy) return;
+    if (!form.hidden) {
+      picker.focus();
+      return;
+    }
     resetForm();
     void request({ type: 'clear-draft' }).catch(fail);
     form.hidden = false;
@@ -279,6 +338,8 @@ function fail(error: unknown): void {
   );
 }
 function resetForm(): void {
+  editorTouched = true;
+  void storeEditor(null);
   invalidatePreview();
   form.reset();
   interval.value = '5';
@@ -310,6 +371,16 @@ function applyDraft(draft: Draft | null): void {
   if (!name.value) name.value = draft.title.slice(0, 100);
   sample.textContent = draft.sample;
   message('Region selected. Choose a schedule, then save your monitor.');
+  editorTouched = true;
+  void storeEditor(editorValue())
+    .then((saved) => {
+      if (saved)
+        return request({
+          type: 'clear-draft',
+          expected: JSON.stringify(draft),
+        });
+    })
+    .catch(fail);
 }
 function applyView(view: View): void {
   viewVersion++;
@@ -326,7 +397,7 @@ let refreshing = false;
 let refreshAgain = false;
 async function refresh(): Promise<void> {
   refreshAgain = true;
-  if (refreshing) return;
+  if (refreshing || editorRestoring) return;
   refreshing = true;
   try {
     do {
@@ -363,6 +434,7 @@ async function testSelector(): Promise<void> {
       origins: [originPattern(targetUrl)],
     });
     testSelectorButton.disabled = true;
+    submit.disabled = true;
     selectorStatus.textContent = 'Testing selector…';
     selectorStatus.classList.remove('error');
     sample.textContent = '';
@@ -391,6 +463,7 @@ async function testSelector(): Promise<void> {
     }
   } finally {
     testSelectorButton.disabled = false;
+    submit.disabled = busy;
   }
 }
 async function pick(): Promise<void> {
@@ -445,6 +518,16 @@ form.addEventListener('submit', (event) => {
     origins: [originPattern(value.url)],
   });
   busy = true;
+  form.setAttribute('aria-busy', 'true');
+  const locked = Array.from(
+    form.querySelectorAll<
+      HTMLInputElement | HTMLSelectElement | HTMLButtonElement
+    >('input,select,button'),
+  ).map((node) => ({ node, disabled: node.disabled }));
+  locked.forEach(({ node }) => {
+    node.disabled = true;
+  });
+  newMonitor.disabled = true;
   submit.disabled = true;
   void (async () => {
     try {
@@ -466,7 +549,13 @@ form.addEventListener('submit', (event) => {
       fail(error);
     } finally {
       busy = false;
+      form.setAttribute('aria-busy', 'false');
+      locked.forEach(({ node, disabled }) => {
+        node.disabled = disabled;
+      });
+      newMonitor.disabled = false;
       submit.disabled = false;
+      if (form.hidden) newMonitor.focus();
     }
   })();
 });
@@ -497,6 +586,7 @@ function edit(m: Monitor): void {
   cancel.hidden = false;
   name.focus();
   form.scrollIntoView({ block: 'start', behavior: 'instant' });
+  rememberEditor();
 }
 async function mutate(requestValue: Request, success: string): Promise<void> {
   if (!('id' in requestValue) || pendingActions.has(requestValue.id)) return;
@@ -873,4 +963,57 @@ chrome.storage.onChanged.addListener((changes, area) => {
   )
     void refresh();
 });
-void refresh();
+form.addEventListener('input', rememberEditor);
+form.addEventListener('change', rememberEditor);
+async function restoreEditor(): Promise<void> {
+  const version = viewVersion;
+  try {
+    const [saved, view] = await Promise.all([
+      editorWindow.then(readEditorDraft),
+      request({ type: 'list' }),
+    ]);
+    if (saved && !editorTouched) {
+      if (
+        saved.editingId &&
+        !view.monitors.some((monitor) => monitor.id === saved.editingId)
+      ) {
+        await storeEditor(null);
+        message(
+          'The monitor you were editing was removed. Start a new monitor when ready.',
+        );
+      } else {
+        editingId = saved.editingId;
+        name.value = saved.name;
+        url.value = saved.url;
+        selector.value = saved.selector;
+        interval.value = saved.interval;
+        units.value = saved.units;
+        interval.min = units.value === '1' ? '30' : '1';
+        interval.max = String(86400 / Number(units.value));
+        durationMode.value = saved.durationMode;
+        duration.value = saved.duration;
+        durationField.hidden = saved.durationMode !== 'duration';
+        duration.required = !durationField.hidden;
+        renderJavaScript.checked = saved.renderJavaScript;
+        editWarning.hidden = !editingId;
+        formTitle.textContent = editingId ? 'Edit monitor' : 'New monitor';
+        submit.textContent = editingId ? 'Save changes' : 'Start monitoring';
+        cancel.hidden = false;
+        initialized = true;
+        form.hidden = false;
+        editorStatus.textContent =
+          'Restored your unfinished draft. Review it before saving.';
+        invalidatePreview();
+      }
+    }
+    if (editorTouched) initialized = true;
+    if (version === viewVersion) applyView(view);
+  } catch (error) {
+    if (version === viewVersion) fail(error);
+    refreshAgain = true;
+  } finally {
+    editorRestoring = false;
+    if (refreshAgain) void refresh();
+  }
+}
+void restoreEditor();

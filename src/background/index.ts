@@ -25,6 +25,12 @@ const NOTIFY_ALARM = 'pending-notifications';
 let tail: Promise<unknown> = Promise.resolve();
 let checkingId: string | null = null;
 const requestedChecks = new Set<string>();
+let draftTail: Promise<unknown> = Promise.resolve();
+function draftSerial<T>(work: () => Promise<T>): Promise<T> {
+  const task = draftTail.then(work);
+  draftTail = task.catch(() => {});
+  return task;
+}
 function serial<T>(work: () => Promise<T>): Promise<T> {
   const task = tail.then(work);
   tail = task.catch(() => {});
@@ -165,7 +171,16 @@ export async function checkMonitor(id: string): Promise<void> {
 async function handle(request: Request): Promise<View> {
   if (request.type === 'list') return view();
   if (request.type === 'clear-draft') {
-    await chrome.storage.session.remove('draft');
+    await draftSerial(async () => {
+      const current = draftValue(
+        (await chrome.storage.session.get('draft')).draft,
+      );
+      if (
+        request.expected === undefined ||
+        JSON.stringify(current) === request.expected
+      )
+        await chrome.storage.session.remove('draft');
+    });
     return view();
   }
   if (request.type === 'test-selector') {
@@ -257,7 +272,7 @@ async function handle(request: Request): Promise<View> {
       };
       state.monitors.push(m);
       await writeState(state);
-      await chrome.storage.session.remove('draft');
+      await draftSerial(() => chrome.storage.session.remove('draft'));
       await syncAlarm(m);
       // Worker owns the check, independent of the panel lifetime.
       void serial(() => checkMonitor(m.id)).catch(report);
@@ -288,7 +303,7 @@ async function handle(request: Request): Promise<View> {
       await writeState(state);
       await syncAlarm(m);
       await updateBadge(state.monitors);
-      await chrome.storage.session.remove('draft');
+      await draftSerial(() => chrome.storage.session.remove('draft'));
     }
     return view();
   }
@@ -375,7 +390,7 @@ chrome.runtime.onMessage.addListener((message: unknown, sender, respond) => {
           sample: value.sample,
           title: value.title.slice(0, 100),
         };
-        await chrome.storage.session.set({ draft });
+        await draftSerial(() => chrome.storage.session.set({ draft }));
       }
       return { ok: true };
     }).then(respond, (error) =>

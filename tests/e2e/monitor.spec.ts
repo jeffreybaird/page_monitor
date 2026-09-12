@@ -652,7 +652,11 @@ test('actual side-panel picker identifies an ungranted tab and selects live repl
     )
     .toBe('#replacement');
   await expect(page.locator('[data-page-monitor-overlay]')).toHaveCount(0);
-  expect((await rpc({ type: 'list' })).draft?.sample).toBe('42');
+  expect(
+    await evaluate(
+      `document.querySelector('[aria-label="Selected text preview"]').textContent`,
+    ),
+  ).toBe('42');
   await cdp.detach();
 });
 
@@ -1107,4 +1111,117 @@ test('highlights text changes, reveals full snapshots, and preserves reading pos
   );
   await panel.setViewportSize({ width: 360, height: 800 });
   await panel.screenshot({ path: 'test-results/history.png', fullPage: true });
+});
+
+test('restores unfinished setup and edits, then clears drafts on save and cancel', async () => {
+  const panelUrl = panel.url();
+  await panel
+    .getByLabel('Monitor name', { exact: true })
+    .fill('My saved draft');
+  await panel.getByLabel('Page URL', { exact: true }).fill(`${base}/`);
+  await panel.getByLabel('CSS selector', { exact: true }).fill('#price');
+  await panel.getByLabel('Check every', { exact: true }).fill('3');
+  await expect(panel.getByLabel('Editor draft status')).toHaveText(
+    'Draft saved for this browser session.',
+  );
+  await panel.close();
+  panel = await context.newPage();
+  await panel.goto(panelUrl);
+  await expect(panel.getByLabel('Monitor name', { exact: true })).toHaveValue(
+    'My saved draft',
+  );
+  await expect(panel.getByLabel('Check every', { exact: true })).toHaveValue(
+    '3',
+  );
+  await panel
+    .getByRole('button', { name: 'Start monitoring', exact: true })
+    .click();
+  await expect(
+    panel.getByRole('article', { name: 'My saved draft', exact: true }),
+  ).toBeVisible();
+  await panel.reload();
+  await expect(panel.getByLabel('Monitor name', { exact: true })).toBeHidden();
+  await panel
+    .getByRole('article', { name: 'My saved draft', exact: true })
+    .getByRole('button', { name: 'Edit', exact: true })
+    .click();
+  await panel
+    .getByLabel('Monitor name', { exact: true })
+    .fill('Unfinished rename');
+  await expect(panel.getByLabel('Editor draft status')).toHaveText(
+    'Draft saved for this browser session.',
+  );
+  await panel.close();
+  panel = await context.newPage();
+  await panel.goto(panelUrl);
+  await expect(
+    panel.getByRole('heading', { name: 'Edit monitor', exact: true }),
+  ).toBeVisible();
+  await expect(panel.getByLabel('Monitor name', { exact: true })).toHaveValue(
+    'Unfinished rename',
+  );
+  await panel.getByRole('button', { name: 'Cancel edit', exact: true }).click();
+  await expect(panel.getByLabel('Editor draft status')).toHaveText('');
+  await panel.reload();
+  await expect(panel.getByLabel('Monitor name', { exact: true })).toBeHidden();
+  expect((await rpc({ type: 'list' })).monitors[0].name).toBe('My saved draft');
+});
+
+test('a delayed draft restoration cannot reopen a completed form or replace its saved monitor', async () => {
+  const panelUrl = panel.url();
+  await panel.close();
+  panel = await context.newPage();
+  await panel.addInitScript(() => {
+    const original = chrome.storage.session.get.bind(chrome.storage.session);
+    chrome.storage.session.get = (async (keys: string | string[] | null) => {
+      if (typeof keys === 'string' && keys.startsWith('editorDraft:')) {
+        return new Promise<Record<string, unknown>>((resolve) => {
+          (window as unknown as { releaseDraft: () => void }).releaseDraft =
+            () =>
+              resolve({
+                [keys]: {
+                  editingId: null,
+                  name: 'Old draft',
+                  url: '',
+                  selector: '',
+                  interval: '5',
+                  units: '60',
+                  durationMode: 'forever',
+                  duration: '60',
+                  renderJavaScript: false,
+                },
+              });
+        });
+      }
+      return original(keys);
+    }) as typeof chrome.storage.session.get;
+  });
+  await panel.goto(panelUrl);
+  await expect
+    .poll(() =>
+      panel.evaluate(
+        () =>
+          typeof (window as unknown as { releaseDraft?: () => void })
+            .releaseDraft,
+      ),
+    )
+    .toBe('function');
+  await panel
+    .getByLabel('Monitor name', { exact: true })
+    .fill('New saved monitor');
+  await panel.getByLabel('Page URL', { exact: true }).fill(`${base}/`);
+  await panel.getByLabel('CSS selector', { exact: true }).fill('#price');
+  await panel
+    .getByRole('button', { name: 'Start monitoring', exact: true })
+    .click();
+  await expect(
+    panel.getByRole('article', { name: 'New saved monitor', exact: true }),
+  ).toBeVisible();
+  await panel.evaluate(() =>
+    (window as unknown as { releaseDraft: () => void }).releaseDraft(),
+  );
+  await expect(panel.getByLabel('Monitor name', { exact: true })).toBeHidden();
+  await expect(
+    panel.getByRole('article', { name: 'New saved monitor', exact: true }),
+  ).toBeVisible();
 });

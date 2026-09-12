@@ -89,7 +89,7 @@ beforeEach(async () => {
     storage: {
       local,
       session: {
-        get: async () => ({}),
+        get: vi.fn(async () => ({})),
         set: vi.fn(),
         remove: vi.fn(),
         setAccessLevel: async () => {},
@@ -313,6 +313,31 @@ it('clears picker drafts through the trusted panel boundary and after editing', 
       id: 'monitor1',
       input: { ...base(), name: 'Renamed' },
     }),
+  ).toMatchObject({ ok: true });
+  expect(remove).toHaveBeenCalledWith('draft');
+});
+
+it('does not let an older picker consumption clear a newer selection', async () => {
+  const draft = {
+    url: 'https://example.com/',
+    selector: '#new',
+    sample: 'New region',
+    title: 'Page',
+  };
+  vi.mocked(chrome.storage.session.get).mockImplementation(async () => ({
+    draft,
+  }));
+  const remove = vi.mocked(chrome.storage.session.remove);
+  remove.mockClear();
+  expect(
+    await rpc({
+      type: 'clear-draft',
+      expected: JSON.stringify({ ...draft, selector: '#old' }),
+    }),
+  ).toMatchObject({ ok: true });
+  expect(remove).not.toHaveBeenCalled();
+  expect(
+    await rpc({ type: 'clear-draft', expected: JSON.stringify(draft) }),
   ).toMatchObject({ ok: true });
   expect(remove).toHaveBeenCalledWith('draft');
 });

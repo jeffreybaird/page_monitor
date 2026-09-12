@@ -34,6 +34,13 @@ page; cancel and restart any active element picker on the target page.
    text** shows the latest successful reading. Mark alerts read, check now, pause/resume, edit,
    or delete a monitor from the side panel. Resuming starts its chosen duration anew.
 
+Unfinished setup and edits are saved per window for the current browser session.
+Reopening the panel restores the form; saving or canceling clears it. Drafts contain
+only form fields, not page snapshots, and URLs with embedded credentials are
+rejected. Slow checks leave the dashboard responsive, with progress and clear
+results. Changing the page, region, or rendering option starts a new baseline and
+clears history; the editor explains this before saving.
+
 Existing matching tabs are read without reloading, including tabs in other normal
 windows. If several match, a usable tab is preferred,
 then an active tab. A loading tab can be read as soon as its selected content exists,
