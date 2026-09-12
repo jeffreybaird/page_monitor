@@ -73,6 +73,22 @@ h4 {
   padding: 16px;
   border-radius: 6px;
 }
+.plan {
+  margin: 0 0 16px;
+  background: #f8f9fa;
+}
+.plan h2 {
+  margin-bottom: 6px;
+}
+.plan .hint {
+  margin-top: 0;
+}
+.plan .actions button {
+  font-size: 12px;
+}
+.plan .status {
+  margin-bottom: 0;
+}
 label {
   display: block;
   font-size: 12px;

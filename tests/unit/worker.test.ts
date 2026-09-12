@@ -1,10 +1,20 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { Monitor, Reply } from '../../src/shared/model';
 const mocks = vi.hoisted(() => ({
+  license: vi.fn(),
+  refreshLicense: vi.fn(),
+  openPurchase: vi.fn(),
   readRegion: vi.fn(),
   deliver: vi.fn(),
   updateBadge: vi.fn(),
   notifyRendering: vi.fn(),
+}));
+vi.mock('../../src/background/payments', () => ({
+  license: mocks.license,
+  refreshLicense: mocks.refreshLicense,
+  openPurchase: mocks.openPurchase,
+  initializePayments: vi.fn().mockResolvedValue(undefined),
+  LICENSE_ALARM: 'license-refresh',
 }));
 vi.mock('../../src/background/reader', () => ({
   readRegion: mocks.readRegion,
@@ -59,6 +69,11 @@ function rpc(
 }
 beforeEach(async () => {
   vi.resetModules();
+  mocks.license.mockReset().mockResolvedValue({ paid: true, configured: true });
+  mocks.refreshLicense
+    .mockReset()
+    .mockResolvedValue({ paid: true, configured: true });
+  mocks.openPurchase.mockReset().mockResolvedValue(undefined);
   mocks.readRegion.mockReset().mockResolvedValue({ text: '41', source: 'tab' });
   mocks.deliver.mockReset().mockResolvedValue(undefined);
   mocks.notifyRendering.mockReset().mockResolvedValue(undefined);
@@ -361,5 +376,141 @@ it('refreshes HTML without a text alert and preserves both snapshots on failure'
     snapshot: '40',
     snapshotHtml: '<strong>40</strong>',
     error: 'Offline',
+  });
+});
+
+describe('paid plan enforcement', () => {
+  const freeMonitor = (id: string): Monitor => ({
+    ...base(),
+    id,
+    selector: `#${id}`,
+    intervalSeconds: 300,
+  });
+  const state = () => data.pageMonitor as { version: 1; monitors: Monitor[] };
+  function free(monitors: Monitor[]) {
+    mocks.license.mockResolvedValue({ paid: false, configured: true });
+    data.pageMonitor = { version: 1, monitors };
+    set.mockClear();
+    mocks.readRegion.mockClear();
+  }
+  it('rejects rapid create and edit without writing or reading the page', async () => {
+    free([freeMonitor('1')]);
+    const input = { ...base(), selector: '#new' };
+    expect((await rpc({ type: 'create', input })).ok).toBe(false);
+    expect((await rpc({ type: 'update', id: '1', input })).ok).toBe(false);
+    expect(set).not.toHaveBeenCalled();
+    expect(mocks.readRegion).not.toHaveBeenCalled();
+  });
+  it('serializes concurrent attempts to take the final free slot', async () => {
+    free([freeMonitor('1'), freeMonitor('2')]);
+    const replies = await Promise.all(
+      ['3', '4'].map((id) => rpc({ type: 'create', input: freeMonitor(id) })),
+    );
+    expect(replies.filter((r) => r.ok)).toHaveLength(1);
+    expect(state().monitors).toHaveLength(3);
+  });
+  it('rejects resume and expired-monitor edit when three others are active', async () => {
+    free([
+      freeMonitor('1'),
+      freeMonitor('2'),
+      freeMonitor('3'),
+      { ...freeMonitor('4'), enabled: false },
+      { ...freeMonitor('5'), endsAt: 1 },
+    ]);
+    expect((await rpc({ type: 'toggle', id: '4', enabled: true })).ok).toBe(
+      false,
+    );
+    expect(
+      (await rpc({ type: 'update', id: '5', input: freeMonitor('5') })).ok,
+    ).toBe(false);
+    expect(set).not.toHaveBeenCalled();
+  });
+  it('permits pausing and an edit to free settings without deleting history', async () => {
+    free([{ ...base(), id: '1' }]);
+    expect((await rpc({ type: 'toggle', id: '1', enabled: false })).ok).toBe(
+      true,
+    );
+    expect(
+      (await rpc({ type: 'update', id: '1', input: freeMonitor('1') })).ok,
+    ).toBe(true);
+    expect((await rpc({ type: 'toggle', id: '1', enabled: true })).ok).toBe(
+      true,
+    );
+  });
+  it('pauses existing premium monitors before extraction and preserves settings', async () => {
+    free([
+      base(),
+      freeMonitor('1'),
+      freeMonitor('2'),
+      freeMonitor('3'),
+      freeMonitor('4'),
+    ]);
+    const { checkMonitor } = await import('../../src/background/index');
+    await checkMonitor('monitor1');
+    expect(mocks.readRegion).not.toHaveBeenCalled();
+    expect(state().monitors[0]).toMatchObject({
+      enabled: false,
+      intervalSeconds: 30,
+      snapshot: '40',
+    });
+    expect(state().monitors[4]).toMatchObject({ enabled: false });
+    expect(state().monitors.filter((m) => m.enabled)).toHaveLength(3);
+  });
+  it('does not accept a forged paid payload or checkout request from a website', async () => {
+    free([freeMonitor('1')]);
+    expect((await rpc({ type: 'set-license', paid: true })).ok).toBe(false);
+    expect(
+      (
+        await rpc(
+          { type: 'purchase' },
+          { ...sender, url: 'https://example.com/' },
+        )
+      ).ok,
+    ).toBe(false);
+    expect(mocks.openPurchase).not.toHaveBeenCalled();
+    expect(set).not.toHaveBeenCalled();
+  });
+  it('paid users can create a fourth active monitor with a rapid interval', async () => {
+    data.pageMonitor = {
+      version: 1,
+      monitors: [freeMonitor('1'), freeMonitor('2'), freeMonitor('3')],
+    };
+    const result = await rpc({
+      type: 'create',
+      input: { ...base(), selector: '#paid' },
+    });
+    expect(result.ok).toBe(true);
+    expect(state().monitors).toHaveLength(4);
+    expect(state().monitors[3]).toMatchObject({
+      enabled: true,
+      intervalSeconds: 30,
+    });
+  });
+  it('upgrade startup preserves settings and clears restricted alarms before any read', async () => {
+    free([
+      base(),
+      freeMonitor('1'),
+      freeMonitor('2'),
+      freeMonitor('3'),
+      freeMonitor('4'),
+    ]);
+    alarms.set('monitor:monitor1', { periodInMinutes: 0.5 });
+    alarms.set('monitor:4', { periodInMinutes: 5 });
+    vi.resetModules();
+    await import('../../src/background/index');
+    expect((await rpc({ type: 'list' })).ok).toBe(true);
+    expect(state().monitors[0]).toMatchObject({
+      enabled: false,
+      intervalSeconds: 30,
+      snapshot: '40',
+    });
+    expect(alarms.has('monitor:monitor1')).toBe(false);
+    expect(alarms.has('monitor:4')).toBe(false);
+    expect(mocks.readRegion).not.toHaveBeenCalled();
+  });
+  it('checkout alone does not unlock paid access', async () => {
+    free([]);
+    expect((await rpc({ type: 'purchase' })).ok).toBe(true);
+    expect((await rpc({ type: 'create', input: base() })).ok).toBe(false);
   });
 });

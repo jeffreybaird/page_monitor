@@ -1,3 +1,17 @@
+import {
+  paidFeatureReason,
+  FREE_ACTIVE_MONITORS,
+  FREE_INTERVAL_SECONDS,
+  isActive,
+} from '../shared/plans';
+import {
+  license,
+  refreshLicense,
+  openPurchase,
+  initializePayments,
+  settleLicenseAlarm,
+  LICENSE_ALARM,
+} from './payments';
 import { initializePlatform, registerToolbar, supportedTab } from '#platform';
 import { api } from '../platform/api';
 import { draftValue, pendingValue } from '../shared/session';
@@ -46,6 +60,7 @@ function errorText(error: unknown): string {
 async function view(): Promise<View> {
   return {
     monitors: (await readState()).monitors,
+    license: await license(),
     checkingId,
     draft: draftValue((await api().storage.session.get('draft')).draft),
   };
@@ -64,6 +79,42 @@ async function syncAlarm(m: Monitor): Promise<void> {
     when: next,
     periodInMinutes: m.intervalSeconds / 60,
   });
+}
+/** Pause restricted monitors without changing their saved settings or history. */
+async function enforcePlan(): Promise<void> {
+  if ((await license()).paid) return;
+  const state = await readState();
+  let active = 0;
+  let changed = false;
+  for (const m of state.monitors) {
+    if (!isActive(m, Date.now())) continue;
+    const restricted =
+      m.intervalSeconds < FREE_INTERVAL_SECONDS ||
+      active >= FREE_ACTIVE_MONITORS;
+    if (restricted) {
+      m.enabled = false;
+      m.error =
+        'Paused: a $2.99 lifetime license is required. Upgrade or edit settings to use the free plan, then resume.';
+      changed = true;
+    } else active++;
+  }
+  if (changed) await writeState(state);
+  // Retry clearing stale alarms even if an earlier clear failed after persistence.
+  for (const m of state.monitors) if (!m.enabled) await syncAlarm(m);
+}
+async function requirePlan(
+  interval: number,
+  active: boolean,
+  id?: string,
+): Promise<void> {
+  if ((await license()).paid) return;
+  const reason = paidFeatureReason(
+    (await readState()).monitors,
+    interval,
+    active,
+    id,
+  );
+  if (reason) throw new Error(reason);
 }
 async function notifyPending(id: string): Promise<void> {
   const state = await readState();
@@ -101,6 +152,7 @@ async function scheduleNotifications(): Promise<void> {
   } else await api().alarms.clear(NOTIFY_ALARM);
 }
 export async function checkMonitor(id: string): Promise<void> {
+  await enforcePlan();
   await notifyPending(id);
   let state = await readState();
   let m = state.monitors.find((m) => m.id === id);
@@ -173,6 +225,15 @@ export async function checkMonitor(id: string): Promise<void> {
 }
 async function handle(request: Request): Promise<View> {
   if (request.type === 'list') return view();
+  if (request.type === 'purchase' || request.type === 'restore-purchase') {
+    await openPurchase(request.type === 'restore-purchase');
+    return view();
+  }
+  if (request.type === 'refresh-license') {
+    await refreshLicense();
+    await enforcePlan();
+    return view();
+  }
   if (request.type === 'clear-draft') {
     await draftSerial(async () => {
       const current = draftValue(
@@ -248,6 +309,17 @@ async function handle(request: Request): Promise<View> {
       }))
     )
       throw new Error('Site access is required. Allow access and try again.');
+    const existing =
+      request.type === 'update'
+        ? state.monitors.find((m) => m.id === request.id)
+        : undefined;
+    if (request.type === 'update' && !existing)
+      throw new Error('Monitor not found.');
+    await requirePlan(
+      input.intervalSeconds,
+      request.type === 'create' || !!existing?.enabled,
+      existing?.id,
+    );
     if (request.type === 'create') {
       if (state.monitors.length >= MAX_MONITORS)
         throw new Error(
@@ -331,6 +403,7 @@ async function handle(request: Request): Promise<View> {
     await writeState(state);
     await updateBadge(state.monitors);
   } else if (request.type === 'toggle') {
+    if (request.enabled) await requirePlan(m.intervalSeconds, true, m.id);
     m.enabled = request.enabled;
     if (m.enabled) {
       m.endsAt =
@@ -438,6 +511,8 @@ api().runtime.onMessage.addListener((message: unknown, sender, respond) => {
 });
 async function initialize(): Promise<void> {
   await initializePlatform();
+  await initializePayments().catch(() => {});
+  await enforcePlan();
   await cleanupRenderingTabs();
   await api().storage.session.remove('checkingMonitor');
   const state = await readState();
@@ -470,6 +545,17 @@ api().tabs.onActivated.addListener(({ tabId }) => {
   void releaseRenderingTab(tabId).catch(report);
 });
 api().alarms.onAlarm.addListener((alarm) => {
+  if (alarm.name === LICENSE_ALARM) {
+    void serial(async () => {
+      try {
+        await refreshLicense();
+        await enforcePlan();
+      } finally {
+        await settleLicenseAlarm();
+      }
+    }).catch(() => {});
+    return;
+  }
   if (alarm.name === RENDER_CLEANUP_ALARM) {
     void cleanupRenderingTabs().catch(report);
     return;

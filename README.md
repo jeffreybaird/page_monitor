@@ -2,7 +2,8 @@
 
 A local Chrome and desktop Firefox extension that watches selected page text and
 notifies you on each subsequent change. Chrome 120+ or Firefox 140+, Manifest V3.
-No account, billing, cloud checks, analytics, or synchronization.
+Free local monitoring; optional $2.99 USD lifetime license through ExtensionPay.
+No cloud checks, analytics, or monitor synchronization. See [payment setup](docs/payments.md).
 
 ## Load it
 
@@ -34,6 +35,14 @@ non-container tabs using the default Firefox session. If only a container tab
 matches a saved URL, checks stop with an explanation rather than reading that
 account or silently falling back to the default session. With both types open,
 only the normal tab is eligible. Firefox for Android is outside this release.
+
+## Pricing
+
+Free: three active monitors, checking every five minutes or longer. Pay $2.99 USD
+once for lifetime access to faster checks and more active monitors (20 saved
+maximum). Screenshots are deferred. Purchase and restoration controls are in the
+side panel; builds without an ExtensionPay product ID remain free-only. Existing
+monitors above free limits are paused without deleting settings or history.
 
 ## Use it
 
@@ -120,7 +129,9 @@ The browser must remain running and the computer awake to perform checks. Alarms
 be delayed; the interval is a target, not a real-time guarantee. Duration expiry
 is enforced before and after a check. Limits bound local storage and work: 20
 monitors, 8,000 characters per region, 2 MB fetched HTML, and 10 changes per
-monitor. These are safety limits, not paid tiers.
+monitor. Free users can run three active monitors at five-minute or longer
+intervals; the lifetime license unlocks faster intervals and additional active
+monitors within those safety limits.
 
 Pending notifications survive worker restarts and retry once a minute, even when
 a monitor is paused or expired. Stable notification IDs reduce duplicate UI entries
@@ -242,3 +253,8 @@ Recheck before releases; do not process untrusted image packages with this toolc
 `npm run package:firefox` creates an unsigned artifact only. Mozilla signing and
 store submission are separate release actions; never include signing credentials
 in the manifest, source tree, or archive.
+
+Licensing adds access to `https://extensionpay.com/*`. ExtensionPay/Stripe handle
+purchase and restoration data; monitor content stays local. Licensing credentials
+and cached status use local storage. Firefox requests optional licensing data
+consent on supported versions. See [payment data and setup](docs/payments.md).

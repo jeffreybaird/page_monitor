@@ -155,7 +155,7 @@ async function create() {
       name: 'Fixture price',
       url: `${base}/`,
       selector: '#price',
-      intervalSeconds: 30,
+      intervalSeconds: 300,
       durationMinutes: null,
     },
   });
@@ -273,7 +273,7 @@ test('picker is repeatable, cancellable, and creates a monitor through the panel
   );
   await expect(page.locator('[data-page-monitor-overlay]')).toHaveCount(0);
   await panel.getByLabel('Monitor name', { exact: true }).fill('My dashboard');
-  await panel.getByLabel('Check every', { exact: true }).fill('2');
+  await panel.getByLabel('Check every', { exact: true }).fill('5');
   await panel
     .getByLabel('Monitor for', { exact: true })
     .selectOption('duration');
@@ -286,7 +286,7 @@ test('picker is repeatable, cancellable, and creates a monitor through the panel
   ).toBeVisible();
   await waitForBaseline();
   const m = (await rpc({ type: 'list' })).monitors[0];
-  expect(m.intervalSeconds).toBe(120);
+  expect(m.intervalSeconds).toBe(300);
   expect(m.durationMinutes).toBe(60);
   await panel.getByRole('button', { name: 'Pause', exact: true }).click();
   await expect(
@@ -681,6 +681,8 @@ test('picker keeps a failed acknowledgement visible instead of discarding the se
 
 for (const framed of [false, true]) {
   test(`picks and monitors nested web components${framed ? ' inside a same-origin frame' : ''}`, async () => {
+    // The frame case exercises two separate 20-second rendering failure deadlines.
+    if (framed) test.setTimeout(60000);
     const page = await context.newPage();
     await page.goto(`${base}/`);
     let target = page.mainFrame();
@@ -743,7 +745,7 @@ for (const framed of [false, true]) {
         name: 'Component price',
         url: `${base}/`,
         selector,
-        intervalSeconds: 30,
+        intervalSeconds: 300,
         durationMinutes: null,
       },
     });
@@ -872,7 +874,7 @@ test('renders JavaScript with the session, warns once, and removes temporary tab
           { css: '#js-card', via: 'shadow' },
           { css: '#js-price' },
         ]),
-      intervalSeconds: 30,
+      intervalSeconds: 300,
       durationMinutes: null,
     },
   });
@@ -962,7 +964,7 @@ test('opens on the dashboard, filters monitors, and keeps creation a deliberate 
       name: 'Dashboard heading',
       url: `${base}/`,
       selector: 'h1',
-      intervalSeconds: 30,
+      intervalSeconds: 300,
       durationMinutes: null,
     },
   });
@@ -1016,7 +1018,7 @@ test('keeps the dashboard responsive during a check and reports its real outcome
       name: 'Slow page',
       url: `${base}/deferred`,
       selector: '#price',
-      intervalSeconds: 30,
+      intervalSeconds: 300,
       durationMinutes: null,
     },
   });
@@ -1133,6 +1135,8 @@ test('restores unfinished setup and edits, then clears drafts on save and cancel
   await expect(panel.getByLabel('Check every', { exact: true })).toHaveValue(
     '3',
   );
+  // Drafts preserve premium settings; choose a free interval before committing.
+  await panel.getByLabel('Check every', { exact: true }).fill('5');
   await panel
     .getByRole('button', { name: 'Start monitoring', exact: true })
     .click();
@@ -1277,4 +1281,51 @@ test('renders current HTML, updates formatting without alerts, and sanitizes sto
     path: 'test-results/html-preview.png',
     fullPage: true,
   });
+});
+
+test('free plan rejects fast checks and a fourth active monitor while preserving editor input', async () => {
+  await expect(
+    panel.getByRole('button', { name: 'Buy lifetime · $2.99' }),
+  ).toBeDisabled();
+  await panel.getByLabel('Monitor name', { exact: true }).fill('Premium draft');
+  await panel.getByLabel('Page URL', { exact: true }).fill(`${base}/`);
+  await panel.getByLabel('CSS selector', { exact: true }).fill('#price');
+  await panel.getByLabel('Check every', { exact: true }).fill('1');
+  await panel
+    .getByRole('button', { name: 'Start monitoring', exact: true })
+    .click();
+  await expect(
+    panel.getByText(
+      'Checks faster than 5 minutes require a $2.99 lifetime license.',
+      { exact: true },
+    ),
+  ).toBeVisible();
+  expect((await rpc({ type: 'list' })).monitors).toHaveLength(0);
+  await expect(panel.getByLabel('Monitor name', { exact: true })).toHaveValue(
+    'Premium draft',
+  );
+  for (let i = 0; i < 3; i++)
+    await rpc({
+      type: 'create',
+      input: {
+        name: `Free ${i}`,
+        url: `${base}/?monitor=${i}`,
+        selector: '#price',
+        intervalSeconds: 300,
+        durationMinutes: null,
+      },
+    });
+  await expect(
+    rpc({
+      type: 'create',
+      input: {
+        name: 'Fourth',
+        url: `${base}/?monitor=4`,
+        selector: '#price',
+        intervalSeconds: 300,
+        durationMinutes: null,
+      },
+    }),
+  ).rejects.toThrow('More than 3 active');
+  expect((await rpc({ type: 'list' })).monitors).toHaveLength(3);
 });

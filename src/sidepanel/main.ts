@@ -3,6 +3,11 @@ import { api } from '../platform/api';
 import './style.css';
 import { textDiff } from './diff';
 import { htmlPreview } from './html-preview';
+import { isActive, LIFETIME_PRICE, paidFeatureReason } from '../shared/plans';
+import {
+  preparePaymentConsent,
+  requestPaymentConsent,
+} from '../shared/payment-consent';
 import {
   readEditorDraft,
   saveEditorDraft,
@@ -150,6 +155,9 @@ renderJavaScript.addEventListener('change', invalidatePreview);
 let editingId: string | null = null;
 let draftKey = '';
 let monitors: Monitor[] = [];
+let license: View['license'];
+let licenseBusy = false;
+let paymentConsentReady = false;
 let busy = false;
 let editorTouched = false;
 let editorRestoring = true;
@@ -213,6 +221,9 @@ const picker = button(
 );
 const intervalRow = el('div', '', 'interval-row');
 intervalRow.append(field('Check every', interval), field('Unit', units));
+const intervalHint = el('p', '', 'hint');
+intervalHint.id = 'interval-plan-hint';
+interval.setAttribute('aria-describedby', intervalHint.id);
 const submit = el('button', 'Start monitoring', 'primary');
 submit.type = 'submit';
 const cancel = button(
@@ -251,6 +262,7 @@ form.append(
   selectorStatus,
   sample,
   intervalRow,
+  intervalHint,
   el(
     'p',
     `Minimum 30 seconds. Checks may be delayed while ${browserName} sleeps.`,
@@ -322,7 +334,109 @@ help.append(
     'Text changes trigger desktop notifications and a badge. Snapshots and the latest 10 changes stay on this device. Site access is requested only when you add a monitor or select a region.',
   ),
 );
-app.append(header, local, status, toolbar, form, section, help);
+const plan = el('section', '', 'surface plan');
+plan.setAttribute('aria-label', 'License');
+const planTitle = el('h2', 'Free plan');
+const planDetails = el('p', '', 'hint');
+const planStatus = el('p', '', 'status');
+planStatus.setAttribute('role', 'status');
+const purchase = button(
+  `Buy lifetime · ${LIFETIME_PRICE}`,
+  () => {
+    void licenseAction('purchase');
+  },
+  'primary',
+);
+const restore = button('Restore purchase', () => {
+  void licenseAction('restore-purchase');
+});
+const refreshLicense = button('Refresh license', () => {
+  void licenseAction('refresh-license');
+});
+const planActions = el('div', '', 'actions');
+planActions.append(purchase, restore, refreshLicense);
+const paymentDisclosure = el(
+  'p',
+  'ExtensionPay and Stripe handle your email, purchase, and license data for payment and restoration. Monitor content stays local.',
+  'hint',
+);
+plan.append(planTitle, planDetails, paymentDisclosure, planActions, planStatus);
+app.append(header, local, status, plan, toolbar, form, section, help);
+
+function renderPlan(): void {
+  planTitle.textContent = license?.paid
+    ? 'Lifetime license active'
+    : 'Free plan';
+  planDetails.textContent = license?.paid
+    ? 'Faster checks and more than 3 active monitors unlocked. Local safety limit: 20 saved monitors.'
+    : `Free: 3 active monitors, checking every 5 minutes or longer. ${LIFETIME_PRICE} once unlocks faster checks and more active monitors, up to the local limit of 20 saved monitors.`;
+  if (!license?.configured)
+    planDetails.textContent +=
+      license === undefined
+        ? ' Loading license status…'
+        : ' Purchases are not configured in this build.';
+  purchase.hidden = !!license?.paid;
+  purchase.disabled =
+    licenseBusy || !paymentConsentReady || !license?.configured;
+  restore.disabled =
+    licenseBusy || !paymentConsentReady || !license?.configured;
+  refreshLicense.disabled =
+    licenseBusy || !paymentConsentReady || !license?.configured;
+  plan.setAttribute('aria-busy', String(licenseBusy));
+  intervalHint.textContent = license?.paid
+    ? 'Lifetime license: intervals from 30 seconds are unlocked.'
+    : `Free: 5 minutes or longer. Faster checks require the ${LIFETIME_PRICE} lifetime license.`;
+}
+
+async function licenseAction(
+  type: 'purchase' | 'restore-purchase' | 'refresh-license',
+): Promise<void> {
+  if (licenseBusy || !paymentConsentReady || !license?.configured) return;
+  licenseBusy = true;
+  renderPlan();
+  planStatus.classList.remove('error');
+  planStatus.textContent =
+    type === 'refresh-license'
+      ? 'Checking your license…'
+      : 'Opening the secure licensing page…';
+  try {
+    // Keep Firefox's optional consent request inside the original click gesture.
+    if (type !== 'refresh-license' && !(await requestPaymentConsent()))
+      throw new Error(
+        'Licensing permission was denied. No purchase or restoration was started.',
+      );
+    applyView(await request({ type }));
+    planStatus.textContent = license?.paid
+      ? 'Your lifetime license is active.'
+      : type === 'refresh-license'
+        ? 'No paid license found. Finish your purchase or restore it, then refresh again.'
+        : type === 'purchase'
+          ? 'Finish your purchase in the checkout page, then return here and refresh your license.'
+          : 'Restore your purchase in the licensing page, then return here and refresh your license.';
+  } catch (error) {
+    planStatus.textContent =
+      error instanceof Error
+        ? error.message
+        : 'Could not access licensing. Please try again.';
+    planStatus.classList.add('error');
+  } finally {
+    licenseBusy = false;
+    renderPlan();
+  }
+}
+renderPlan();
+void preparePaymentConsent()
+  .then(() => {
+    paymentConsentReady = true;
+    renderPlan();
+  })
+  .catch((error: unknown) => {
+    planStatus.textContent =
+      error instanceof Error
+        ? error.message
+        : 'Could not check licensing permissions. Reopen the panel.';
+    planStatus.classList.add('error');
+  });
 
 function message(text: string, error = false): void {
   status.textContent = text;
@@ -392,6 +506,8 @@ function applyDraft(draft: Draft | null): void {
 function applyView(view: View): void {
   viewVersion++;
   monitors = view.monitors;
+  license = view.license;
+  renderPlan();
   checkingId = view.checkingId ?? null;
   if (!initialized) {
     form.hidden = monitors.length > 0 && !view.draft;
@@ -535,6 +651,16 @@ form.addEventListener('submit', (event) => {
       throw new Error(
         'Enter a name, region, interval of 30 seconds to 24 hours, and a valid duration.',
       );
+    if (!license?.paid) {
+      const existing = monitors.find((monitor) => monitor.id === editingId);
+      const reason = paidFeatureReason(
+        monitors,
+        value.intervalSeconds,
+        !editingId || !!existing?.enabled,
+        editingId ?? undefined,
+      );
+      if (reason) throw new Error(reason);
+    }
   } catch (error) {
     fail(error);
     return;
@@ -619,6 +745,23 @@ async function mutate(requestValue: Request, success: string): Promise<void> {
   if (!('id' in requestValue) || pendingActions.has(requestValue.id)) return;
   const id = requestValue.id;
   const before = monitors.find((m) => m.id === id);
+  if (
+    requestValue.type === 'toggle' &&
+    requestValue.enabled &&
+    before &&
+    !license?.paid
+  ) {
+    const reason = paidFeatureReason(
+      monitors,
+      before.intervalSeconds,
+      true,
+      id,
+    );
+    if (reason) {
+      message(reason, true);
+      return;
+    }
+  }
   pendingActions.set(id, requestValue.type);
   viewVersion++;
   renderMonitors();
@@ -660,10 +803,8 @@ const cards = new Map<string, { node: HTMLElement; value: string }>();
 function renderMonitors(): void {
   const unread = monitors.reduce((total, monitor) => total + monitor.unread, 0);
   const attention = monitors.filter((monitor) => monitor.error).length;
-  const active = monitors.filter(
-    (monitor) =>
-      monitor.enabled &&
-      !(monitor.endsAt !== null && monitor.endsAt <= Date.now()),
+  const active = monitors.filter((monitor) =>
+    isActive(monitor, Date.now()),
   ).length;
   overview.textContent = `${active} active · ${unread} unread${attention ? ` · ${attention} need attention` : ''}`;
   filters.hidden = monitors.length === 0;
@@ -995,7 +1136,7 @@ function renderMonitors(): void {
 }
 api().storage.onChanged.addListener((changes, area) => {
   if (
-    (area === 'local' && changes.pageMonitor) ||
+    (area === 'local' && (changes.pageMonitor || changes.pageMonitorLicense)) ||
     (area === 'session' && (changes.draft || changes.checkingMonitor))
   )
     void refresh();

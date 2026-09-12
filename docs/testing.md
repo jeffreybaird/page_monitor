@@ -154,3 +154,24 @@ cleanup, browser restart, and preservation of a temporary tab the user activates
   UI rejection, activated-rendering-tab preservation, and live reference-site
   authentication remain manual release checks. Unit tests cover container
   rejection and notification failures; browser success is not inferred from mocks.
+
+### Lifetime licensing verification — 2026-09-12
+
+- `npm run verify`: 133 unit/integration tests, typecheck, lint, formatting and both
+  production builds passed.
+- Chromium: 20 of 23 journeys passed on the first runnable full suite. The draft
+  fixture was updated to choose a free interval before saving; the payment fixture
+  now serves its simulated checkout instead of aborting it. The frame journey's
+  timeout budget covers two deliberate 20-second rendering failures. All three
+  affected cases and the new free-limit journey passed on targeted rerun (4/4).
+- The payment browser journey compiles a configured build in a temporary directory
+  and executes the real bundled SDK. Worker HTTP responses are stubbed and DNS is
+  blocked. It checks abort signals, checkout/restore page creation, verified paid
+  status, and absence of licensing credentials from sync storage.
+- Firefox 155.0.1 integration suite passed with `/private/tmp/geckodriver`.
+  `npm run lint:firefox` returned zero errors and the same three reviewed warnings.
+- Live provider charging/restoration and native Firefox licensing consent remain
+  release checks. No ExtensionPay product/account was supplied for live testing.
+- `npm audit` reports three existing high-severity development-tool advisories in
+  the `web-ext` → `addons-linter` → `image-size` chain (image parser denial of
+  service). No production dependency finding; no unrelated major downgrade applied.

@@ -48,6 +48,9 @@ export type MonitorInput = Pick<
 >;
 export type Request =
   | { type: 'list' }
+  | { type: 'purchase' }
+  | { type: 'restore-purchase' }
+  | { type: 'refresh-license' }
   | { type: 'clear-draft'; expected?: string }
   | { type: 'pick'; tabId: number; url: string }
   | {
@@ -61,6 +64,7 @@ export type Request =
   | { type: 'check' | 'delete' | 'read'; id: string }
   | { type: 'toggle'; id: string; enabled: boolean };
 export type View = {
+  license?: { paid: boolean; configured: boolean };
   monitors: Monitor[];
   draft: Draft | null;
   checkingId?: string | null;
@@ -121,7 +125,12 @@ export function inputValid(input: unknown): input is MonitorInput {
 export function requestValid(value: unknown): value is Request {
   if (!value || typeof value !== 'object') return false;
   const r = value as Record<string, unknown>;
-  if (r.type === 'list') return true;
+  if (
+    ['list', 'purchase', 'restore-purchase', 'refresh-license'].includes(
+      String(r.type),
+    )
+  )
+    return true;
   if (r.type === 'clear-draft')
     return (
       r.expected === undefined ||

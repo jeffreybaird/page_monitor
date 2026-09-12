@@ -15,7 +15,8 @@ and launch proposals in the original rough plan.
 - Continue monitoring after each change; desktop alerts and a badge are sufficient.
   Notification delivery has an adapter boundary for future channels.
 - Initial detection is any normalized text change. Thresholds, regular expressions,
-  screenshots, sound, paid plans, launch dates, and cloud checks are deferred.
+  screenshots, sound, launch dates, and cloud checks are deferred. Paid plans
+  follow the lifetime licensing decision below.
 - Begin with generic HTTP/HTTPS support and the authenticated Elixir dashboard as
   a reference; show capability limits rather than promising all pages work.
 - Expand across HTTP/HTTPS sites with per-origin access. Open-tab selection supports
@@ -59,3 +60,15 @@ session restoration does not grant ownership over restored user tabs.
   restrictions equivalent to Chrome's APIs. Handle notification creation failures
   and document OS suppression and storage visibility without claiming parity there.
 - Firefox Android, Safari, signing and public distribution are outside this change.
+
+## Lifetime license
+
+- $2.99 USD once for lifetime access to intervals below five minutes and more than
+  three active monitors. Free intervals start at exactly five minutes. Retain the
+  30-second minimum and 20-saved-monitor safety cap. Screenshots remain future paid scope.
+- Use ExtensionPay with a configured product ID; absent configuration is free-only.
+- Preserve settings/history when pausing existing monitors outside free limits;
+  keep the first three eligible active monitors in saved order. Users resume explicitly.
+- Verified paid access persists offline. Failed checks never downgrade it; a
+  successful unpaid provider response does. Payments do not transmit monitored content.
+- Setup, data retention, recovery and release checks are in [payments.md](payments.md).
