@@ -13,7 +13,12 @@ import {
 } from '../shared/model';
 import { readState, writeState } from './storage';
 import { readRegion } from './reader';
-import { deliver, updateBadge } from './notifiers';
+import {
+  cleanupRenderingTabs,
+  releaseRenderingTab,
+  RENDER_CLEANUP_ALARM,
+} from './renderer';
+import { deliver, updateBadge, notifyRendering } from './notifiers';
 const PREFIX = 'monitor:';
 const NOTIFY_ALARM = 'pending-notifications';
 // Single worker owns all read/modify/write operations. Persisted state is authoritative.
@@ -105,7 +110,20 @@ export async function checkMonitor(id: string): Promise<void> {
       throw new Error(
         'Notification backlog is full. Checks will resume after notifications can be delivered.',
       );
-    const result = await readRegion(m);
+    const monitor = m;
+    const result = await readRegion(m, async () => {
+      if (monitor.endsAt !== null && Date.now() >= monitor.endsAt)
+        throw new Error(
+          'Monitoring duration ended before JavaScript rendering could start.',
+        );
+      monitor.renderingRequired = true;
+      await writeState(state);
+      if (!monitor.renderingNotified) {
+        await notifyRendering(monitor.id, monitor.name);
+        monitor.renderingNotified = true;
+        await writeState(state);
+      }
+    });
     if (m.endsAt !== null && Date.now() >= m.endsAt) {
       m.enabled = false;
       await writeState(state);
@@ -140,7 +158,14 @@ async function handle(request: Request): Promise<View> {
   if (request.type === 'list') return view();
   if (request.type === 'test-selector') {
     const url = webUrl(request.url);
-    const result = await readRegion({ url, selector: request.selector });
+    const result = await readRegion(
+      {
+        url,
+        selector: request.selector,
+        renderJavaScript: request.renderJavaScript,
+      },
+      () => notifyRendering('preview', 'This selector preview'),
+    );
     return {
       ...(await view()),
       preview: { url, selector: request.selector, ...result },
@@ -176,7 +201,10 @@ async function handle(request: Request): Promise<View> {
   const state = await readState();
   if (request.type === 'create' || request.type === 'update') {
     const input = {
-      ...request.input,
+      selector: request.input.selector,
+      intervalSeconds: request.input.intervalSeconds,
+      durationMinutes: request.input.durationMinutes,
+      renderJavaScript: !!request.input.renderJavaScript,
       url: webUrl(request.input.url),
       name: request.input.name.trim(),
     };
@@ -224,7 +252,14 @@ async function handle(request: Request): Promise<View> {
     } else {
       const m = state.monitors.find((m) => m.id === request.id);
       if (!m) throw new Error('Monitor not found.');
-      if (m.url !== input.url || m.selector !== input.selector) {
+      if (
+        m.url !== input.url ||
+        m.selector !== input.selector ||
+        !!m.renderJavaScript !== !!input.renderJavaScript
+      ) {
+        m.renderingRequired = false;
+        m.renderingNotified = false;
+        m.source = null;
         m.snapshot = null;
         m.history = [];
         m.unread = 0;
@@ -353,6 +388,7 @@ async function initialize(): Promise<void> {
     accessLevel: 'TRUSTED_CONTEXTS',
   });
   await chrome.sidePanel.setPanelBehavior({ openPanelOnActionClick: true });
+  await cleanupRenderingTabs();
   const state = await readState();
   let changed = false;
   for (const m of state.monitors) {
@@ -379,7 +415,14 @@ async function initialize(): Promise<void> {
 function report(error: unknown) {
   console.error('Page Monitor operation failed:', errorText(error));
 }
+chrome.tabs.onActivated.addListener(({ tabId }) => {
+  void releaseRenderingTab(tabId).catch(report);
+});
 chrome.alarms.onAlarm.addListener((alarm) => {
+  if (alarm.name === RENDER_CLEANUP_ALARM) {
+    void cleanupRenderingTabs().catch(report);
+    return;
+  }
   if (alarm.name === NOTIFY_ALARM)
     void serial(async () => {
       for (const m of (await readState()).monitors) await notifyPending(m.id);

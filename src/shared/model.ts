@@ -21,7 +21,10 @@ export type Monitor = {
   lastCheckAt: number | null;
   lastChangeAt: number | null;
   error: string | null;
-  source: 'tab' | 'background' | null;
+  source: 'tab' | 'background' | 'rendered' | null;
+  renderJavaScript?: boolean;
+  renderingRequired?: boolean;
+  renderingNotified?: boolean;
   history: Change[];
   unread: number;
 };
@@ -34,12 +37,22 @@ export type Draft = {
 };
 export type MonitorInput = Pick<
   Monitor,
-  'name' | 'url' | 'selector' | 'intervalSeconds' | 'durationMinutes'
+  | 'name'
+  | 'url'
+  | 'selector'
+  | 'intervalSeconds'
+  | 'durationMinutes'
+  | 'renderJavaScript'
 >;
 export type Request =
   | { type: 'list' }
   | { type: 'pick'; tabId: number; url: string }
-  | { type: 'test-selector'; url: string; selector: string }
+  | {
+      type: 'test-selector';
+      url: string;
+      selector: string;
+      renderJavaScript?: boolean;
+    }
   | { type: 'create'; input: MonitorInput }
   | { type: 'update'; id: string; input: MonitorInput }
   | { type: 'check' | 'delete' | 'read'; id: string }
@@ -51,7 +64,7 @@ export type View = {
     url: string;
     selector: string;
     text: string;
-    source: 'tab' | 'background';
+    source: 'tab' | 'background' | 'rendered';
   };
 };
 export type Reply = { ok: true; value: View } | { ok: false; error: string };
@@ -82,6 +95,8 @@ export function inputValid(input: unknown): input is MonitorInput {
     return false;
   }
   return (
+    (i.renderJavaScript === undefined ||
+      typeof i.renderJavaScript === 'boolean') &&
     typeof i.name === 'string' &&
     i.name.trim().length > 0 &&
     i.name.length <= 100 &&
@@ -119,6 +134,8 @@ export function requestValid(value: unknown): value is Request {
   if (r.type === 'test-selector') {
     try {
       return (
+        (r.renderJavaScript === undefined ||
+          typeof r.renderJavaScript === 'boolean') &&
         typeof r.url === 'string' &&
         !!webUrl(r.url) &&
         typeof r.selector === 'string' &&

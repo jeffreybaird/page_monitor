@@ -3,7 +3,7 @@ export function extractRegion(
   selector: string,
   expectedUrl?: string,
   doc: Document = document,
-): { text: string } | { error: string } {
+): { text: string } | { error: string; renderable?: boolean } {
   if (expectedUrl && location.href !== expectedUrl)
     return { error: 'The tab navigated away. Open the monitored URL again.' };
   try {
@@ -39,13 +39,15 @@ export function extractRegion(
           return {
             error:
               'The selected component or frame is missing or ambiguous. Open the page and reselect the region.',
+            renderable: hosts.length === 0,
           };
         const host: Element = hosts[0];
         if (via === 'shadow') {
           if (!host.shadowRoot)
             return {
               error:
-                'This region needs an open tab with an accessible web component. Keep the page open and try again.',
+                'This region needs JavaScript rendering or an open tab with an accessible web component.',
+              renderable: true,
             };
           root = host.shadowRoot;
         } else {
@@ -63,12 +65,14 @@ export function extractRegion(
               return {
                 error:
                   'This frame is unavailable or belongs to another site. Keep the page open; only same-origin frames are supported.',
+                renderable: !doc.defaultView,
               };
             root = child;
           } catch {
             return {
               error:
                 'This frame is unavailable or belongs to another site. Keep the page open; only same-origin frames are supported.',
+              renderable: !doc.defaultView,
             };
           }
         }
@@ -80,6 +84,7 @@ export function extractRegion(
         error: matches.length
           ? 'Selection is ambiguous. Reselect the region.'
           : 'Selected region was not found. Sign in or reselect it; background HTML may not contain dynamic content.',
+        renderable: matches.length === 0,
       };
     const element = matches[0];
     if (
@@ -111,6 +116,7 @@ export function extractRegion(
       return {
         error:
           'Selected region is empty. Check your session or select another region.',
+        renderable: true,
       };
     if (text.length > 8000)
       return {

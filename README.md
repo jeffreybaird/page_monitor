@@ -37,8 +37,16 @@ then an active tab. A loading tab can be read as soon as its selected content ex
 without waiting for unrelated resources. A tab discarded by Chrome Memory Saver
 must be opened manually to resume open-tab checks, or closed to allow background
 checks; the extension never wakes or reloads it. When no matching tab exists, the
-extension fetches the URL with browser session cookies. It does **not** create
-background tabs. Clicking a notification intentionally opens/focuses its page.
+extension first fetches the URL with browser session cookies. If the selected text
+is missing, empty, or inside a component/frame absent from that HTML, it uses a
+temporary inactive, muted tab to run the site's JavaScript. A desktop alert precedes
+the first such check for each monitor, and its card keeps a rendering notice.
+If desktop alerts are disabled, the first rendering check stops with an explanation.
+Subsequent rendering checks do not repeat the capability alert; content-change
+notifications continue normally. Selector previews also alert before rendering.
+The temporary tab closes after checking or failure. Selecting it keeps it open.
+No existing user tab is reloaded or closed. Clicking a change notification
+intentionally opens/focuses its page.
 
 ## Support and limits
 
@@ -46,13 +54,18 @@ HTTP and HTTPS HTML pages are eligible, with access requested per origin. The
 initial reference site is [Elixir as Infrastructure](https://elixir-as-inf.diviningdad.com/),
 whose overview updates live. A useful region is `section[aria-label="Last 15 minutes"]`.
 
-Open tabs expose their rendered DOM. Closed-tab checks inspect server-returned
-HTML and cannot execute the site's JavaScript. Some dynamic pages only work with
-the tab open. Login redirects, request failures, missing/ambiguous elements,
+Open tabs expose their rendered DOM. Closed-tab checks try server HTML first and
+remember when JavaScript rendering is necessary. Enable **Render JavaScript for
+closed-tab checks** when server HTML contains matching placeholder text; automatic
+detection cannot distinguish a placeholder from real content. Temporary rendering
+waits for page load completion and one second of stable selected text, up to twenty
+seconds. This is a bounded heuristic, not proof that every asynchronous update has
+finished. Sites that render only in active tabs or take longer may still require an
+open tab. HTTP/login errors do not automatically trigger a rendering fallback. Login redirects, request failures, unresolved missing/ambiguous elements,
 empty regions, and detected login forms are errors, never changes. The last good
 baseline remains intact. Sign in again in a normal tab when a session expires.
 Cookie restrictions, site defenses, and site-specific authentication can prevent
-background checks; universal site/authentication support is not promised. A stale
+checks; universal site/authentication support is not promised. A stale
 open page cannot universally reveal that a session expired elsewhere.
 
 The picker supports ordinary HTML text, nested open Shadow DOM (web components),
@@ -63,8 +76,8 @@ outer container; text extraction does not combine separate shadow trees.
 
 Cross-origin or sandbox-isolated frames, closed shadow roots, image/pixel changes,
 input values, PDF viewers, Chrome internal/store pages, and incognito are
-unsupported. Component/frame selections generally need the tab to remain open;
-background HTML parsing does not execute component code or load nested frames. Automatic selector fallback
+unsupported. Supported component and same-origin frame selections use temporary
+rendering when the closed page's background HTML cannot provide them. Automatic selector fallback
 is deliberately omitted to avoid silently watching the wrong region after a redesign.
 
 Comparison collapses whitespace and excludes script/style, hidden attributes,
@@ -105,7 +118,10 @@ checks target the saved URL. User-triggered page loads and checks contact the
 monitored site with the browser session. Page content is stored locally, never
 sent to a monitoring service. Notifications may display selected text on screen.
 No passwords or cookies are copied into extension storage. Delete monitors to
-remove their snapshots/history, or uninstall to clear extension data. Removing a
+remove their snapshots/history, or uninstall to clear extension data. Temporary tab ownership is kept in session storage with a cleanup alarm, so worker
+restarts can close abandoned inactive rendering tabs. Browser-session restarts clear
+that ownership; a restored tab is treated as a user tab and is not automatically
+closed. Removing a
 monitor does not revoke Chrome's origin permission; manage that in extension site
 access settings.
 
@@ -137,8 +153,9 @@ explicit product/privacy decision and per-channel delivery bookkeeping before sh
   navigation, permissions, and the element picker on the selected page.
 - Sign into the reference site in the Chrome profile where the unpacked extension
   is loaded. Select its overview section and confirm live changes without reloads.
-- Close that tab, check again, and verify whether its server HTML exposes the same
-  selected text. If not, retain the tab and use the clear background error state.
+- Close that tab and check again. Verify the rendering alert appears if necessary,
+  the temporary tab stays inactive, and it closes after checking. Select a temporary
+  tab and confirm it is retained.
 - Sign out and verify that failed checks retain the last good snapshot.
 - Check actual OS notification appearance and clicking, which headless tests
   cannot fully establish. Verify paused/duration expiry and browser restart recovery.

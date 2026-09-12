@@ -1,8 +1,13 @@
+import { renderRegion } from './renderer';
 import { extractRegion } from '../content/extract';
 import { originPattern, type Monitor } from '../shared/model';
 export async function readRegion(
-  m: Pick<Monitor, 'url' | 'selector'>,
-): Promise<{ text: string; source: 'tab' | 'background' }> {
+  m: Pick<
+    Monitor,
+    'url' | 'selector' | 'renderJavaScript' | 'renderingRequired'
+  >,
+  beforeRendering: () => Promise<void>,
+): Promise<{ text: string; source: 'tab' | 'background' | 'rendered' }> {
   if (!(await chrome.permissions.contains({ origins: [originPattern(m.url)] })))
     throw new Error(
       'Site access was removed. Grant access from the monitor settings.',
@@ -32,6 +37,24 @@ export async function readRegion(
     const value: unknown = results[0]?.result;
     return { text: checkedText(value), source: 'tab' };
   }
+  const render = async () => {
+    await beforeRendering();
+    return {
+      text: await renderRegion(m.url, m.selector),
+      source: 'rendered' as const,
+    };
+  };
+  if (m.renderJavaScript || m.renderingRequired) return render();
+  try {
+    return await readBackground(m);
+  } catch (error) {
+    if (error instanceof RenderingNeeded) return render();
+    throw error;
+  }
+}
+async function readBackground(
+  m: Pick<Monitor, 'url' | 'selector'>,
+): Promise<{ text: string; source: 'background' }> {
   const response = await fetch(m.url, {
     credentials: 'include',
     cache: 'no-store',
@@ -89,11 +112,15 @@ export async function readRegion(
     await chrome.offscreen.closeDocument();
   }
 }
+class RenderingNeeded extends Error {}
 function checkedText(value: unknown): string {
   if (!value || typeof value !== 'object')
     throw new Error('No page content was returned.');
-  if ('error' in value && typeof value.error === 'string')
+  if ('error' in value && typeof value.error === 'string') {
+    if ('renderable' in value && value.renderable === true)
+      throw new RenderingNeeded(value.error);
     throw new Error(value.error);
+  }
   if (
     !('text' in value) ||
     typeof value.text !== 'string' ||

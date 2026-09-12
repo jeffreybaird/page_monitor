@@ -42,6 +42,36 @@ test.beforeEach(async () => {
       res.end();
       return;
     }
+    if (req.url === '/placeholder') {
+      res.writeHead(200, { 'content-type': 'text/html' });
+      res.end(
+        '<!doctype html><title>Deferred application</title><p id="placeholder">Loading</p><script src="/delayed-app"></script>',
+      );
+      return;
+    }
+    if (req.url === '/delayed-app') {
+      res.writeHead(200, { 'content-type': 'application/javascript' });
+      setTimeout(
+        () =>
+          res.end('document.querySelector("#placeholder").textContent = "51"'),
+        1500,
+      );
+      return;
+    }
+    if (req.url === '/javascript') {
+      res.writeHead(200, {
+        'content-type': 'text/html',
+        'cache-control': 'no-store',
+      });
+      res.end(`<!doctype html><title>JavaScript fixture</title><p>Application shell</p><script>
+        setTimeout(() => {
+          if (localStorage.getItem('fixture-login') === 'yes') {
+            const card = document.createElement('price-card'); card.id = 'js-card'; const root = card.attachShadow({mode: 'open'}); const region = document.createElement('p'); region.id = 'js-price'; region.textContent = ${JSON.stringify(price)}; root.append(region); document.body.append(card);
+          }
+        }, 300);
+      </script>`);
+      return;
+    }
     res.writeHead(200, {
       'content-type': 'text/html',
       'cache-control': 'no-store',
@@ -326,6 +356,12 @@ test('recovers missing alarms and pending alerts after real worker termination',
     await chrome.storage.local.set({ pageMonitor: state });
     await chrome.alarms.clearAll();
   }, id);
+  const orphanId = await panel.evaluate(async () => {
+    const tab = await chrome.tabs.create({ url: 'about:blank', active: false });
+    if (tab.id === undefined) throw new Error('No temporary fixture tab');
+    await chrome.storage.session.set({ [`render-tab:${tab.id}`]: true });
+    return tab.id;
+  });
   await cdp.send('ServiceWorker.stopWorker', { versionId: version.versionId });
   await rpc({ type: 'list' });
   await expect
@@ -341,6 +377,11 @@ test('recovers missing alarms and pending alerts after real worker termination',
   expect(state.monitors[0].snapshot).toBe('40');
   // Chrome accepted desktop delivery even though headless OS presentation is not asserted.
   expect(state.monitors[0].history[0].delivered).toBe(true);
+  expect(
+    await panel.evaluate(async () =>
+      (await chrome.tabs.query({})).map((tab) => tab.id),
+    ),
+  ).not.toContain(orphanId);
   await cdp.detach();
 });
 
@@ -786,4 +827,108 @@ test('reads a rendered region while an unrelated resource keeps its tab loading'
     release();
     await page.close();
   }
+});
+
+test('renders JavaScript with the session, warns once, and removes temporary tabs', async () => {
+  await panel.evaluate(() => {
+    const diagnostics: unknown[] = [];
+    (window as unknown as { renderDiagnostics: unknown[] }).renderDiagnostics =
+      diagnostics;
+    chrome.tabs.onUpdated.addListener((id, change, tab) =>
+      diagnostics.push({ id, change, url: tab.url, status: tab.status }),
+    );
+  });
+
+  const setup = await context.newPage();
+  await setup.goto(`${base}/javascript`);
+  await setup.evaluate(() => localStorage.setItem('fixture-login', 'yes'));
+  await setup.close();
+  const tabsBefore = await panel.evaluate(async () =>
+    (await chrome.tabs.query({})).map((tab) => tab.id),
+  );
+  const view = await rpc({
+    type: 'create',
+    input: {
+      name: 'JS price',
+      url: `${base}/javascript`,
+      selector:
+        '@page-monitor:' +
+        JSON.stringify([
+          { css: '#js-card', via: 'shadow' },
+          { css: '#js-price' },
+        ]),
+      intervalSeconds: 30,
+      durationMinutes: null,
+    },
+  });
+  const id = view.monitors[0].id;
+  const initial = (await rpc({ type: 'list' })).monitors[0];
+  expect(
+    initial,
+    JSON.stringify(
+      await panel.evaluate(
+        () =>
+          (window as unknown as { renderDiagnostics: unknown[] })
+            .renderDiagnostics,
+      ),
+    ),
+  ).toMatchObject({ snapshot: '40', error: null });
+  let monitor = (await rpc({ type: 'list' })).monitors[0];
+  expect(monitor).toMatchObject({
+    source: 'rendered',
+    renderingRequired: true,
+    renderingNotified: true,
+  });
+  await expect(
+    panel.getByText(
+      'JavaScript rendering required: closed-tab checks use a temporary inactive tab with your session.',
+      { exact: true },
+    ),
+  ).toBeVisible();
+  expect(
+    await panel.evaluate(async () =>
+      Object.keys(await chrome.notifications.getAll()),
+    ),
+  ).toContain(`rendering:${id}`);
+  expect(
+    await panel.evaluate(async () =>
+      (await chrome.tabs.query({})).map((tab) => tab.id),
+    ),
+  ).toEqual(tabsBefore);
+  price = '41';
+  monitor = (await rpc({ type: 'check', id })).monitors[0];
+  expect(monitor.snapshot).toBe('41');
+  expect(monitor.history).toHaveLength(1);
+  expect(
+    await panel.evaluate(async () =>
+      (await chrome.tabs.query({})).map((tab) => tab.id),
+    ),
+  ).toEqual(tabsBefore);
+});
+
+test('manual JavaScript preview waits for a delayed script to replace matching placeholder text', async () => {
+  await panel
+    .getByLabel('Page URL', { exact: true })
+    .fill(`${base}/placeholder`);
+  await panel.getByLabel('CSS selector', { exact: true }).fill('#placeholder');
+  await panel
+    .getByLabel('Render JavaScript for closed-tab checks', { exact: true })
+    .check();
+  await panel
+    .getByRole('button', { name: 'Test selector', exact: true })
+    .click();
+  await expect(
+    panel.getByText(
+      'Valid selector · One region found in a temporary tab (JavaScript rendering was required). Nothing has been saved.',
+      { exact: true },
+    ),
+  ).toBeVisible();
+  await expect(panel.getByText('51', { exact: true })).toBeVisible();
+  expect((await rpc({ type: 'list' })).monitors).toHaveLength(0);
+  expect(
+    await panel.evaluate(
+      async (url) => (await chrome.tabs.query({ url })).length,
+      `${base}/placeholder`,
+    ),
+  ).toBe(0);
 });

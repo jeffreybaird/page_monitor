@@ -4,6 +4,7 @@ const mocks = vi.hoisted(() => ({
   readRegion: vi.fn(),
   deliver: vi.fn(),
   updateBadge: vi.fn(),
+  notifyRendering: vi.fn(),
 }));
 vi.mock('../../src/background/reader', () => ({
   readRegion: mocks.readRegion,
@@ -11,6 +12,12 @@ vi.mock('../../src/background/reader', () => ({
 vi.mock('../../src/background/notifiers', () => ({
   deliver: mocks.deliver,
   updateBadge: mocks.updateBadge,
+  notifyRendering: mocks.notifyRendering,
+}));
+vi.mock('../../src/background/renderer', () => ({
+  cleanupRenderingTabs: vi.fn().mockResolvedValue(undefined),
+  releaseRenderingTab: vi.fn().mockResolvedValue(undefined),
+  RENDER_CLEANUP_ALARM: 'render-cleanup',
 }));
 const base = (): Monitor => ({
   id: 'monitor1',
@@ -54,6 +61,7 @@ beforeEach(async () => {
   vi.resetModules();
   mocks.readRegion.mockReset().mockResolvedValue({ text: '41', source: 'tab' });
   mocks.deliver.mockReset().mockResolvedValue(undefined);
+  mocks.notifyRendering.mockReset().mockResolvedValue(undefined);
   mocks.updateBadge.mockReset().mockResolvedValue(undefined);
   data = { pageMonitor: { version: 1, monitors: [base()] } };
   alarms = new Map();
@@ -66,6 +74,7 @@ beforeEach(async () => {
     setAccessLevel: async () => {},
   };
   vi.stubGlobal('chrome', {
+    tabs: { onActivated: { addListener: vi.fn() } },
     runtime: {
       id: extensionId,
       getURL: (p: string) => `chrome-extension://${extensionId}/${p}`,
@@ -215,5 +224,46 @@ describe('worker ownership and recovery', () => {
     expect(current().history.at(-1)?.id).toBe('9');
     expect(current().error).toContain('backlog');
     expect(mocks.readRegion).not.toHaveBeenCalled();
+  });
+});
+
+it('persists rendering notice before first rendering and alerts once per monitor', async () => {
+  mocks.readRegion.mockImplementation(async (_monitor, beforeRendering) => {
+    await beforeRendering();
+    expect(
+      (data.pageMonitor as { monitors: Monitor[] }).monitors[0]
+        .renderingRequired,
+    ).toBe(true);
+    return { text: 'Rendered', source: 'rendered' };
+  });
+  const first = await rpc({ type: 'check', id: 'monitor1' });
+  expect(first.ok).toBe(true);
+  expect(mocks.notifyRendering).toHaveBeenCalledOnce();
+  const second = await rpc({ type: 'check', id: 'monitor1' });
+  expect(second.ok).toBe(true);
+  expect(mocks.notifyRendering).toHaveBeenCalledOnce();
+  expect(
+    (data.pageMonitor as { monitors: Monitor[] }).monitors[0],
+  ).toMatchObject({
+    renderingRequired: true,
+    renderingNotified: true,
+    source: 'rendered',
+  });
+});
+
+it('keeps baseline and visible rendering requirement if the warning fails', async () => {
+  mocks.notifyRendering.mockRejectedValue(new Error('Notifications disabled'));
+  mocks.readRegion.mockImplementation(async (_monitor, beforeRendering) => {
+    await beforeRendering();
+    throw new Error('Must not render');
+  });
+  await rpc({ type: 'check', id: 'monitor1' });
+  expect(
+    (data.pageMonitor as { monitors: Monitor[] }).monitors[0],
+  ).toMatchObject({
+    snapshot: '40',
+    history: [],
+    renderingRequired: true,
+    error: 'Notifications disabled',
   });
 });

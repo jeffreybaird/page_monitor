@@ -82,6 +82,7 @@ const selector = input('text');
 selector.required = true;
 selector.maxLength = 2000;
 selector.placeholder = 'Pick a region, or enter a CSS selector';
+const renderJavaScript = input('checkbox');
 const interval = input('number', '5');
 interval.required = true;
 interval.min = '1';
@@ -133,6 +134,7 @@ function invalidatePreview(): void {
 }
 url.addEventListener('input', invalidatePreview);
 selector.addEventListener('input', invalidatePreview);
+renderJavaScript.addEventListener('change', invalidatePreview);
 let editingId: string | null = null;
 let draftKey = '';
 let monitors: Monitor[] = [];
@@ -158,6 +160,12 @@ form.append(
   field('Monitor name', name),
   field('Page URL', url),
   field('CSS selector', selector),
+  field('Render JavaScript for closed-tab checks', renderJavaScript),
+  el(
+    'p',
+    'Automatically uses a temporary inactive tab when page text is missing. Enable this for pages that show placeholder text until JavaScript runs. You will be alerted before the first temporary-tab check.',
+    'hint',
+  ),
   testSelectorButton,
   selectorStatus,
   sample,
@@ -187,7 +195,7 @@ help.append(
   ),
   el(
     'p',
-    'You must remain logged in for private pages. Background requests cannot render JavaScript-only content or use every kind of login session. Open the page if a background check cannot find the selected region.',
+    'You must remain logged in for private pages. When background HTML cannot provide the region, a temporary inactive tab runs the site’s JavaScript using your session, then closes. Selecting that tab keeps it open. Some sites still require an open, active tab.',
   ),
   el(
     'p',
@@ -289,11 +297,12 @@ async function testSelector(): Promise<void> {
       type: 'test-selector',
       url: targetUrl,
       selector: targetSelector,
+      renderJavaScript: renderJavaScript.checked,
     });
     if (generation !== previewGeneration) return;
     if (!result.preview) throw new Error('No selector preview was returned.');
     sample.textContent = result.preview.text;
-    selectorStatus.textContent = `Valid selector · One region found in ${result.preview.source === 'tab' ? 'the open tab' : 'background HTML'}. Nothing has been saved.`;
+    selectorStatus.textContent = `Valid selector · One region found in ${result.preview.source === 'tab' ? 'the open tab' : result.preview.source === 'rendered' ? 'a temporary tab (JavaScript rendering was required)' : 'background HTML'}. Nothing has been saved.`;
   } catch (error) {
     if (generation === previewGeneration) {
       selectorStatus.textContent =
@@ -338,6 +347,7 @@ form.addEventListener('submit', (event) => {
     name: name.value.trim(),
     url: url.value,
     selector: selector.value.trim(),
+    renderJavaScript: renderJavaScript.checked,
     intervalSeconds: Number(interval.value) * Number(units.value),
     durationMinutes:
       durationMode.value === 'duration' ? Number(duration.value) : null,
@@ -392,6 +402,7 @@ function edit(m: Monitor): void {
   name.value = m.name;
   url.value = m.url;
   selector.value = m.selector;
+  renderJavaScript.checked = !!m.renderJavaScript;
   units.value = m.intervalSeconds % 60 === 0 ? '60' : '1';
   interval.value = String(m.intervalSeconds / Number(units.value));
   interval.min = units.value === '1' ? '30' : '1';
@@ -476,10 +487,18 @@ function renderMonitors(): void {
       ),
       el(
         'p',
-        `Last check: ${date(m.lastCheckAt)}${m.source ? ` · ${m.source === 'tab' ? 'Open tab' : 'Background request'}` : ''}`,
+        `Last check: ${date(m.lastCheckAt)}${m.source ? ` · ${m.source === 'tab' ? 'Open tab' : m.source === 'rendered' ? 'Temporary tab · JavaScript' : 'Background request'}` : ''}`,
         'meta',
       ),
     );
+    if (m.renderingRequired)
+      card.append(
+        el(
+          'p',
+          'JavaScript rendering required: closed-tab checks use a temporary inactive tab with your session.',
+          'hint',
+        ),
+      );
     if (m.error) card.append(el('p', m.error, 'check-error'));
     if (m.unread)
       card.append(

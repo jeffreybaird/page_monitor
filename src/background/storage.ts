@@ -39,7 +39,9 @@ export function validateState(value: unknown): State {
         (typeof m.snapshot === 'string' && m.snapshot.length <= MAX_TEXT)
       ) ||
       !(m.error === null || typeof m.error === 'string') ||
-      ![null, 'tab', 'background'].includes(m.source) ||
+      ![null, 'tab', 'background', 'rendered'].includes(m.source) ||
+      ![undefined, true, false].includes(m.renderingRequired) ||
+      ![undefined, true, false].includes(m.renderingNotified) ||
       !Number.isSafeInteger(m.unread) ||
       m.unread < 0 ||
       !Array.isArray(m.history) ||

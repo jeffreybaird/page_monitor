@@ -97,6 +97,42 @@ describe('boundaries', () => {
       }),
     ).toBe(false);
   });
+  it('validates rendering options and preserves existing monitor data', () => {
+    expect(
+      requestValid({
+        type: 'create',
+        input: { ...monitor(), renderJavaScript: 'yes' },
+      }),
+    ).toBe(false);
+    expect(
+      requestValid({
+        type: 'test-selector',
+        url: monitor().url,
+        selector: '#price',
+        renderJavaScript: 'yes',
+      }),
+    ).toBe(false);
+    const existing = { version: 1, monitors: [monitor()] };
+    expect(validateState(existing)).toEqual(existing);
+    const rendered = {
+      version: 1,
+      monitors: [
+        {
+          ...monitor(),
+          source: 'rendered',
+          renderingRequired: true,
+          renderingNotified: true,
+        },
+      ],
+    };
+    expect(validateState(rendered)).toEqual(rendered);
+    expect(() =>
+      validateState({
+        version: 1,
+        monitors: [{ ...monitor(), renderingNotified: 'yes' }],
+      }),
+    ).toThrow();
+  });
   it('initializes missing storage and preserves invalid/future schemas', () => {
     expect(validateState(undefined)).toEqual({ version: 1, monitors: [] });
     expect(() => validateState({ version: 2, monitors: [] })).toThrow();
@@ -160,6 +196,7 @@ describe('component selector paths', () => {
     );
     expect(extractRegion(selector, undefined, inert)).toEqual({
       error: expect.stringContaining('open tab'),
+      renderable: true,
     });
   });
   it('rejects malformed, oversized, and excessive path steps', () => {
@@ -185,6 +222,9 @@ describe('component selector paths', () => {
         undefined,
         doc,
       ),
-    ).toEqual({ error: expect.stringContaining('Keep the page open') });
+    ).toEqual({
+      error: expect.stringContaining('Keep the page open'),
+      renderable: true,
+    });
   });
 });

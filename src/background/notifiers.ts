@@ -36,3 +36,17 @@ export async function updateBadge(monitors: Monitor[]): Promise<void> {
   });
   await chrome.action.setBadgeBackgroundColor({ color: '#185b46' });
 }
+
+// Capability notices are separate from content-change history and badge counts.
+export async function notifyRendering(id: string, name: string): Promise<void> {
+  if ((await chrome.notifications.getPermissionLevel()) !== 'granted')
+    throw new Error(
+      'JavaScript rendering requires a temporary tab. Enable desktop notifications so Page Monitor can alert you before using one.',
+    );
+  await chrome.notifications.create(`rendering:${id}`, {
+    type: 'basic',
+    iconUrl: chrome.runtime.getURL('icons/128.png'),
+    title: 'JavaScript rendering required',
+    message: `${name.slice(0, 100)} needs a temporary inactive tab for closed-tab checks. It uses your browser session and closes after checking.`,
+  });
+}
