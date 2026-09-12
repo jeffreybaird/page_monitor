@@ -28,7 +28,9 @@ page; cancel and restart any active element picker on the target page.
    year) or leave it running until stopped. The default interval is five minutes.
 4. Save. The first successful check establishes a baseline without an alert.
    Every later text change creates a desktop notification and increments the badge.
-5. Inspect before/after history, mark alerts read, check now, pause/resume, edit,
+5. The panel opens on your monitors once setup is complete. Use **New monitor**
+   to add another, or search and filter by unread changes, attention, or status.
+6. Inspect before/after history, mark alerts read, check now, pause/resume, edit,
    or delete a monitor from the side panel. Resuming starts its chosen duration anew.
 
 Existing matching tabs are read without reloading, including tabs in other normal

@@ -62,7 +62,7 @@ const header = el('header');
 header.append(
   el('p', 'YOUR QUIET LOOKOUT', 'eyebrow'),
   el('h1', 'Page Monitor'),
-  el('p', 'Stay with your work. We’ll watch for changes.', 'intro'),
+  el('p', 'Your pages, without the constant checking.', 'intro'),
 );
 const local = el('p', 'On this device · Uses your browser session', 'local');
 const status = el('p', '', 'status');
@@ -150,7 +150,15 @@ const intervalRow = el('div', '', 'interval-row');
 intervalRow.append(field('Check every', interval), field('Unit', units));
 const submit = el('button', 'Start monitoring', 'primary');
 submit.type = 'submit';
-const cancel = button('Cancel edit', () => resetForm(), 'quiet');
+const cancel = button(
+  'Cancel edit',
+  () => {
+    resetForm();
+    form.hidden = monitors.length > 0;
+    if (form.hidden) newMonitor.focus();
+  },
+  'quiet',
+);
 cancel.hidden = true;
 const actions = el('div', '', 'actions');
 actions.append(submit, cancel);
@@ -179,13 +187,44 @@ form.append(
   durationField,
   actions,
 );
+let initialized = false;
+const newMonitor = button(
+  'New monitor',
+  () => {
+    resetForm();
+    form.hidden = false;
+    cancel.hidden = monitors.length === 0;
+    picker.focus();
+    form.scrollIntoView({ block: 'start', behavior: 'instant' });
+  },
+  'primary',
+);
+const toolbar = el('div', '', 'dashboard-toolbar');
+const overview = el('p', '', 'overview');
+overview.setAttribute('aria-label', 'Monitor overview');
+toolbar.append(overview, newMonitor);
+const search = input('search');
+search.setAttribute('aria-label', 'Search monitors');
+search.placeholder = 'Search name or website';
+const filter = select([
+  ['all', 'All monitors'],
+  ['unread', 'Unread changes'],
+  ['attention', 'Needs attention'],
+  ['watching', 'Watching'],
+  ['paused', 'Paused or finished'],
+]);
+filter.setAttribute('aria-label', 'Filter monitors');
+const filters = el('div', '', 'monitor-filters');
+filters.append(search, filter);
+search.addEventListener('input', renderMonitors);
+filter.addEventListener('change', renderMonitors);
 const section = el('section');
 const listHeading = el('h2', 'Your monitors');
 listHeading.tabIndex = -1;
 const count = el('span', '0', 'count');
 listHeading.append(count);
 const list = el('div', '', 'monitor-list');
-section.append(listHeading, list);
+section.append(listHeading, filters, list);
 const help = el('details', '', 'help');
 help.append(
   el('summary', 'How monitoring works'),
@@ -202,7 +241,7 @@ help.append(
     'Text changes trigger desktop notifications and a badge. Snapshots and the latest 10 changes stay on this device. Site access is requested only when you add a monitor or select a region.',
   ),
 );
-app.append(header, local, status, form, section, help);
+app.append(header, local, status, toolbar, form, section, help);
 
 function message(text: string, error = false): void {
   status.textContent = text;
@@ -246,6 +285,8 @@ function applyDraft(draft: Draft | null): void {
     return;
   }
   if (JSON.stringify(draft) === draftKey) return;
+  form.hidden = false;
+  cancel.hidden = monitors.length === 0;
   draftKey = JSON.stringify(draft);
   invalidatePreview();
   url.value = draft.url;
@@ -256,6 +297,10 @@ function applyDraft(draft: Draft | null): void {
 }
 function applyView(view: View): void {
   monitors = view.monitors;
+  if (!initialized) {
+    form.hidden = monitors.length > 0 && !view.draft;
+    initialized = true;
+  }
   renderMonitors();
   applyDraft(view.draft);
 }
@@ -382,6 +427,8 @@ form.addEventListener('submit', (event) => {
       );
       resetForm();
       applyView(view);
+      form.hidden = true;
+      newMonitor.focus();
       message('Monitor saved. Changes will appear below.');
     } catch (error) {
       fail(error);
@@ -398,6 +445,7 @@ function edit(m: Monitor): void {
   if (busy) return;
   invalidatePreview();
   editingId = m.id;
+  form.hidden = false;
   formTitle.textContent = 'Edit monitor';
   name.value = m.name;
   url.value = m.url;
@@ -427,8 +475,38 @@ async function mutate(requestValue: Request, success: string): Promise<void> {
 }
 const cards = new Map<string, { node: HTMLElement; value: string }>();
 function renderMonitors(): void {
-  count.textContent = String(monitors.length);
+  const unread = monitors.reduce((total, monitor) => total + monitor.unread, 0);
+  const attention = monitors.filter((monitor) => monitor.error).length;
+  const active = monitors.filter(
+    (monitor) =>
+      monitor.enabled &&
+      !(monitor.endsAt !== null && monitor.endsAt <= Date.now()),
+  ).length;
+  overview.textContent = `${active} watching · ${unread} unread${attention ? ` · ${attention} need attention` : ''}`;
+  filters.hidden = monitors.length === 0;
+  toolbar.hidden = monitors.length === 0;
   list.querySelector('.empty')?.remove();
+  const query = search.value.trim().toLocaleLowerCase();
+  const visible = (m: Monitor) => {
+    const matchesQuery = `${m.name} ${m.url}`
+      .toLocaleLowerCase()
+      .includes(query);
+    const finished =
+      !m.enabled || (m.endsAt !== null && m.endsAt <= Date.now());
+    return (
+      matchesQuery &&
+      (filter.value === 'all' ||
+        (filter.value === 'unread' && m.unread > 0) ||
+        (filter.value === 'attention' && !!m.error) ||
+        (filter.value === 'watching' && !finished) ||
+        (filter.value === 'paused' && finished))
+    );
+  };
+  const shown = monitors.filter(visible).length;
+  count.textContent =
+    shown === monitors.length
+      ? String(shown)
+      : `${shown} of ${monitors.length}`;
   for (const [id, card] of cards)
     if (!monitors.some((m) => m.id === id)) {
       const focused = card.node.contains(document.activeElement);
@@ -451,6 +529,7 @@ function renderMonitors(): void {
   for (const m of monitors) {
     const previous = cards.get(m.id);
     const serialized = JSON.stringify(m);
+    if (previous) previous.node.hidden = !visible(m);
     if (previous?.value === serialized) continue;
     const focused = previous?.node.contains(document.activeElement)
       ? (document.activeElement as HTMLElement).dataset.action
@@ -458,6 +537,7 @@ function renderMonitors(): void {
     const open = previous?.node.querySelector('details')?.open ?? false;
     const card = el('article', '', 'monitor');
     card.setAttribute('aria-label', m.name);
+    card.hidden = !visible(m);
     const top = el('div', '', 'card-top');
     top.append(
       el('h3', m.name),
@@ -469,7 +549,9 @@ function renderMonitors(): void {
             : 'Paused'
           : m.error
             ? 'Needs attention'
-            : 'Watching',
+            : m.snapshot === null
+              ? 'Getting baseline'
+              : 'Watching',
         'pill',
       ),
     );
@@ -596,6 +678,24 @@ function renderMonitors(): void {
       card
         .querySelector<HTMLButtonElement>(`[data-action="${focused}"]`)
         ?.focus();
+  }
+  if (!shown && monitors.length) {
+    const empty = el('div', '', 'empty');
+    empty.append(
+      el('h3', 'No matching monitors'),
+      el('p', 'Try a different search or show all monitors.'),
+      button(
+        'Clear filters',
+        () => {
+          search.value = '';
+          filter.value = 'all';
+          renderMonitors();
+          search.focus();
+        },
+        'small',
+      ),
+    );
+    list.append(empty);
   }
 }
 chrome.storage.onChanged.addListener(() => {

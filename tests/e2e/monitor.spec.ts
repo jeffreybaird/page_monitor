@@ -932,3 +932,59 @@ test('manual JavaScript preview waits for a delayed script to replace matching p
     ),
   ).toBe(0);
 });
+
+test('opens on the dashboard, filters monitors, and keeps creation a deliberate action', async () => {
+  const first = await create();
+  await waitForBaseline();
+  const second = await rpc({
+    type: 'create',
+    input: {
+      name: 'Dashboard heading',
+      url: `${base}/`,
+      selector: 'h1',
+      intervalSeconds: 30,
+      durationMinutes: null,
+    },
+  });
+  const secondId = second.monitors.find((m) => m.id !== first)?.id;
+  if (!secondId) throw new Error('No second monitor');
+  await rpc({ type: 'toggle', id: secondId, enabled: false });
+  await panel.reload();
+  await expect(panel.getByRole('article')).toHaveCount(2);
+  await expect(panel.getByLabel('Monitor name', { exact: true })).toBeHidden();
+  await panel.getByLabel('Search monitors').fill('heading');
+  await expect(panel.getByRole('article')).toHaveCount(1);
+  await expect(
+    panel.getByRole('article', { name: 'Dashboard heading' }),
+  ).toBeVisible();
+  await panel.getByLabel('Filter monitors').selectOption('watching');
+  await expect(
+    panel.getByText('No matching monitors', { exact: true }),
+  ).toBeVisible();
+  await panel
+    .getByRole('button', { name: 'Clear filters', exact: true })
+    .click();
+  await expect(panel.getByRole('article')).toHaveCount(2);
+  await panel.getByLabel('Filter monitors').selectOption('paused');
+  await expect(panel.getByRole('article')).toHaveCount(1);
+  await panel.getByRole('button', { name: 'New monitor', exact: true }).click();
+  await expect(panel.getByLabel('Monitor name', { exact: true })).toBeVisible();
+  await expect(
+    panel.getByRole('button', { name: 'Select region in current tab' }),
+  ).toBeFocused();
+  await panel.getByRole('button', { name: 'Cancel edit', exact: true }).click();
+  await expect(panel.getByLabel('Monitor name', { exact: true })).toBeHidden();
+  await expect(
+    panel.getByRole('button', { name: 'New monitor', exact: true }),
+  ).toBeFocused();
+  await panel.setViewportSize({ width: 320, height: 800 });
+  expect(
+    await panel.evaluate(
+      () => document.documentElement.scrollWidth <= window.innerWidth,
+    ),
+  ).toBe(true);
+  await panel.screenshot({
+    path: 'test-results/dashboard.png',
+    fullPage: true,
+  });
+});
