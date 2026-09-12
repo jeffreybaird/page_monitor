@@ -11,15 +11,15 @@ Prefer the existing layout. For new infrastructure, group tests by responsibilit
 Keep Vitest and Playwright discovery separate so neither runner collects the other's tests.
 Share typed fixture builders and contract helpers, not mutable state or oversized setup files.
 
-| Behavior | Default test | What it establishes |
-| --- | --- | --- |
-| Validation, calculations, policies, state transitions | Vitest unit test | Domain outcomes and boundary cases |
-| Use-case orchestration | Vitest with injected adapters | Success, declared failures, and side-effect decisions |
-| Storage, migrations, and network clients | Integration test | Persistence/protocol contracts and error mapping |
-| Message handlers | Integration test with realistic sender fixtures | Runtime validation, authorization, and response shape |
-| Simple presentation and DOM extraction | DOM-environment test with fixtures | Rendering, events, and supported page structures |
-| Chrome API behavior, injection, cross-context messaging, lifecycle | Playwright with the built extension | Actual browser integration |
-| Layout, focus, keyboard journeys, visual regressions | Browser test plus targeted inspection | Behavior a simulated DOM cannot establish |
+| Behavior                                                           | Default test                                    | What it establishes                                   |
+| ------------------------------------------------------------------ | ----------------------------------------------- | ----------------------------------------------------- |
+| Validation, calculations, policies, state transitions              | Vitest unit test                                | Domain outcomes and boundary cases                    |
+| Use-case orchestration                                             | Vitest with injected adapters                   | Success, declared failures, and side-effect decisions |
+| Storage, migrations, and network clients                           | Integration test                                | Persistence/protocol contracts and error mapping      |
+| Message handlers                                                   | Integration test with realistic sender fixtures | Runtime validation, authorization, and response shape |
+| Simple presentation and DOM extraction                             | DOM-environment test with fixtures              | Rendering, events, and supported page structures      |
+| Chrome API behavior, injection, cross-context messaging, lifecycle | Playwright with the built extension             | Actual browser integration                            |
+| Layout, focus, keyboard journeys, visual regressions               | Browser test plus targeted inspection           | Behavior a simulated DOM cannot establish             |
 
 Use the lowest-cost layer that proves the behavior. Extension plumbing itself is browser
 behavior: do not postpone all browser coverage until a feature has complex UI. Avoid repeating
@@ -65,16 +65,16 @@ or leave a test bypass in the shipped bundle.
 
 ### Required coverage for affected behavior
 
-| Area | Required cases when applicable |
-| --- | --- |
-| Data and domain | Valid input, missing/invalid fields, boundary values, every declared failure outcome |
-| Persistence | Correct records and query results, failed writes, no partial state where atomicity is required, migrations, concurrent updates |
-| Message boundary | Valid request, unknown operation, malformed/oversized payload, invalid sender, forged identity or target, safe response |
-| Isolation | One tab/frame/account cannot read or mutate another's restricted data; test both permitted and rejected operations |
-| Permissions | Missing, denied, revoked, and granted access; unsupported pages; no unrelated feature regression |
-| Content scripts | First and repeated injection, DOM replacement, navigation, cleanup, expected frames and excluded sites |
-| UI | Success, loading, empty/error states, keyboard operation, focus, and accessible names |
-| Scheduled/durable work | Correct persisted inputs, execution, duplicate delivery, retry bounds, malformed/stale work, recovery after termination |
+| Area                   | Required cases when applicable                                                                                                 |
+| ---------------------- | ------------------------------------------------------------------------------------------------------------------------------ |
+| Data and domain        | Valid input, missing/invalid fields, boundary values, every declared failure outcome                                           |
+| Persistence            | Correct records and query results, failed writes, no partial state where atomicity is required, migrations, concurrent updates |
+| Message boundary       | Valid request, unknown operation, malformed/oversized payload, invalid sender, forged identity or target, safe response        |
+| Isolation              | One tab/frame/account cannot read or mutate another's restricted data; test both permitted and rejected operations             |
+| Permissions            | Missing, denied, revoked, and granted access; unsupported pages; no unrelated feature regression                               |
+| Content scripts        | First and repeated injection, DOM replacement, navigation, cleanup, expected frames and excluded sites                         |
+| UI                     | Success, loading, empty/error states, keyboard operation, focus, and accessible names                                          |
+| Scheduled/durable work | Correct persisted inputs, execution, duplicate delivery, retry bounds, malformed/stale work, recovery after termination        |
 
 For rejection tests, assert both the error and the absence of unauthorized writes or requests.
 For idempotency, assert that running twice produces no extra stored records or external effects;
@@ -101,7 +101,6 @@ failure traces, screenshots, and relevant logs without secrets. Dependency/secur
 need triage; do not blanket-ignore them to make CI green. A skipped or unavailable required
 browser job is a verification gap, not a passing check. Document any flaky test's cause and fix;
 do not silently quarantine it or increase retries until it passes.
-
 
 ## References
 

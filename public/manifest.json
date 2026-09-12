@@ -1,0 +1,28 @@
+{
+  "manifest_version": 3,
+  "name": "Page Monitor",
+  "version": "0.1.0",
+  "minimum_chrome_version": "120",
+  "description": "Watch selected page text and get notified when it changes, using your browser session.",
+  "permissions": [
+    "alarms",
+    "storage",
+    "notifications",
+    "offscreen",
+    "scripting",
+    "sidePanel",
+    "activeTab"
+  ],
+  "optional_host_permissions": ["https://*/*", "http://*/*"],
+  "background": { "service_worker": "background.js", "type": "module" },
+  "action": {
+    "default_title": "Open Page Monitor",
+    "default_icon": { "128": "icons/128.png" }
+  },
+  "icons": { "128": "icons/128.png" },
+  "side_panel": { "default_path": "sidepanel.html" },
+  "content_security_policy": {
+    "extension_pages": "script-src 'self'; object-src 'self'; base-uri 'none'"
+  },
+  "incognito": "not_allowed"
+}

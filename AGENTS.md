@@ -2,12 +2,12 @@
 
 Instructions for working in this repository. Follow the user's task and applicable
 higher-priority instructions. Preserve existing project conventions unless the task changes
-them. This is a template: replace `MyExtension` and document the actual product and commands
-when adopting it. Do not create features merely to satisfy examples in this file.
+them. The approved scope is recorded in `docs/product-decisions.md`. Do not create features
+merely to satisfy examples in this file.
 
 ## Project and Stack
 
-`MyExtension` is a Chrome extension. Record its purpose, supported sites, UI surfaces,
+`Page Monitor` is a local Chrome extension that monitors selected page text and alerts on changes. Record its purpose, supported sites, UI surfaces,
 required permissions, stored data, and minimum supported Chrome version in the README.
 Make routine implementation choices autonomously; ask when missing information materially
 changes product behavior or access to user data.
@@ -57,14 +57,14 @@ do not claim configuration settings or isolation were applied through that fallb
 
 Create only the execution contexts and directories needed:
 
-| Location | Responsibility |
-| --- | --- |
-| `public/` | Manifest and static assets copied into the build |
-| `src/background/` | Service worker and browser event handlers, if needed |
-| `src/content/` | Page interaction and injected UI |
-| `src/popup/`, `src/options/`, `src/sidepanel/` | The extension pages actually used |
-| Other modules under `src/` | Shared operations, types, storage, and clients as needed |
-| `tests/` or colocated tests | Behavior tests and fixtures |
+| Location                                       | Responsibility                                           |
+| ---------------------------------------------- | -------------------------------------------------------- |
+| `public/`                                      | Manifest and static assets copied into the build         |
+| `src/background/`                              | Service worker and browser event handlers, if needed     |
+| `src/content/`                                 | Page interaction and injected UI                         |
+| `src/popup/`, `src/options/`, `src/sidepanel/` | The extension pages actually used                        |
+| Other modules under `src/`                     | Shared operations, types, storage, and clients as needed |
+| `tests/` or colocated tests                    | Behavior tests and fixtures                              |
 
 Keep handlers small. Extract business rules or multi-step operations when they become
 complex or need multiple callers. A popup and context-menu action should call the same
@@ -160,9 +160,7 @@ Expected failures should provide enough information for callers to respond. For 
 with several failure modes, a small discriminated union is useful:
 
 ```ts
-type Result<T, E> =
-  | { ok: true; value: T }
-  | { ok: false; error: E };
+type Result<T, E> = { ok: true; value: T } | { ok: false; error: E };
 ```
 
 Do not require Results for every function. Use stable error codes when callers need to branch;
@@ -210,12 +208,12 @@ permission-denied, and error states understandable. Prefer comfortably sized int
 
 Use actual repository scripts. For a new scaffold, establish and document these contracts:
 
-| Command | Purpose |
-| --- | --- |
-| `npm run dev` | Watch/rebuild for unpacked development |
-| `npm run verify` | Typecheck, lint, formatting, unit/integration tests, production build |
-| `npm run test:e2e` | Browser tests against a fresh production build |
-| `npm run build` | Production extension in `dist/` |
+| Command            | Purpose                                                               |
+| ------------------ | --------------------------------------------------------------------- |
+| `npm run dev`      | Watch/rebuild for unpacked development                                |
+| `npm run verify`   | Typecheck, lint, formatting, unit/integration tests, production build |
+| `npm run test:e2e` | Browser tests against a fresh production build                        |
+| `npm run build`    | Production extension in `dist/`                                       |
 
 Keep the table aligned with `package.json`; these names do not imply scripts already exist.
 Document unpacked loading and when to reload the extension or target page.

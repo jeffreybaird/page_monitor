@@ -1,0 +1,145 @@
+import { beforeEach, describe, expect, it, vi } from 'vitest';
+import {
+  applySnapshot,
+  type Monitor,
+  requestValid,
+} from '../../src/shared/model';
+import { extractRegion } from '../../src/content/extract';
+import {
+  validateState,
+  readState,
+  writeState,
+} from '../../src/background/storage';
+import { deliver } from '../../src/background/notifiers';
+const monitor = (): Monitor => ({
+  id: 'm1',
+  name: 'Price',
+  url: 'https://example.com/',
+  selector: '#price',
+  intervalSeconds: 30,
+  durationMinutes: null,
+  endsAt: null,
+  enabled: true,
+  snapshot: null,
+  lastCheckAt: null,
+  lastChangeAt: null,
+  error: null,
+  source: null,
+  history: [],
+  unread: 0,
+});
+beforeEach(() => {
+  document.body.replaceChildren();
+  vi.unstubAllGlobals();
+});
+describe('comparison and retention', () => {
+  it('baselines without alert, ignores whitespace, emits every subsequent change', () => {
+    let m = applySnapshot(monitor(), '  $40 ', 1, 'one');
+    expect(m.history).toEqual([]);
+    m = applySnapshot(m, '$40\n', 2, 'two');
+    expect(m.unread).toBe(0);
+    m = applySnapshot(m, '$39', 3, 'three');
+    m = applySnapshot(m, '$38', 4, 'four');
+    expect(m.unread).toBe(2);
+    expect(m.history.map((x) => x.id)).toEqual(['four', 'three']);
+    expect(m.history[1].before).toBe('$40');
+  });
+  it('preserves the input on empty/oversized extraction and bounds history', () => {
+    let m = applySnapshot(monitor(), 'start', 1, 'first');
+    expect(() => applySnapshot(m, '', 2, 'bad')).toThrow();
+    expect(m.snapshot).toBe('start');
+    expect(() => applySnapshot(m, 'x'.repeat(8001), 3, 'bad')).toThrow();
+    for (let i = 0; i < 15; i++)
+      m = applySnapshot(m, String(i), i + 3, String(i));
+    expect(m.history).toHaveLength(10);
+  });
+});
+describe('untrusted extraction', () => {
+  it('removes executable, hidden, and form content', () => {
+    document.body.innerHTML =
+      '<section id="price">$40<script>secret()</script><input value="private"><span hidden>private</span></section>';
+    expect(extractRegion('#price')).toEqual({ text: '$40' });
+  });
+  it('refuses login, missing, ambiguous, and editable regions', () => {
+    document.body.innerHTML =
+      '<div class="price">1</div><div class="price">2</div>';
+    expect(extractRegion('.price')).toHaveProperty('error');
+    expect(extractRegion('#missing')).toHaveProperty('error');
+    expect(extractRegion('[')).toHaveProperty('error');
+    document.body.innerHTML =
+      '<div id="price"><input type="password">Sign in</div>';
+    expect(extractRegion('#price')).toHaveProperty('error');
+  });
+  it('parses inert fetched HTML using the same extraction policy', () => {
+    const doc = new DOMParser().parseFromString(
+      '<section id="price">$42<script>bad()</script></section>',
+      'text/html',
+    );
+    expect(extractRegion('#price', undefined, doc)).toEqual({ text: '$42' });
+  });
+});
+describe('boundaries', () => {
+  it('rejects unsafe schedules and malformed messages', () => {
+    for (const intervalSeconds of [0, 5, 29, NaN, Infinity, 86401])
+      expect(
+        requestValid({
+          type: 'create',
+          input: { ...monitor(), intervalSeconds },
+        }),
+      ).toBe(false);
+    expect(requestValid({ type: 'toggle', id: 'm1', enabled: 'yes' })).toBe(
+      false,
+    );
+    expect(
+      requestValid({
+        type: 'create',
+        input: { ...monitor(), durationMinutes: -1 },
+      }),
+    ).toBe(false);
+  });
+  it('initializes missing storage and preserves invalid/future schemas', () => {
+    expect(validateState(undefined)).toEqual({ version: 1, monitors: [] });
+    expect(() => validateState({ version: 2, monitors: [] })).toThrow();
+    expect(() =>
+      validateState({
+        version: 1,
+        monitors: [{ ...monitor(), snapshot: 123 }],
+      }),
+    ).toThrow();
+    expect(() =>
+      validateState({ version: 1, monitors: [monitor(), monitor()] }),
+    ).toThrow();
+  });
+  it('does not mask storage write failures', async () => {
+    const set = vi.fn().mockRejectedValue(new Error('quota'));
+    vi.stubGlobal('chrome', {
+      storage: { local: { set, get: vi.fn().mockResolvedValue({}) } },
+    });
+    await expect(
+      writeState({ version: 1, monitors: [monitor()] }),
+    ).rejects.toThrow('quota');
+    expect(await readState()).toEqual({ version: 1, monitors: [] });
+  });
+  it('supports notifier adapters and propagates delivery failure', async () => {
+    const m = applySnapshot(
+      { ...monitor(), snapshot: 'old' },
+      'new',
+      1,
+      'event',
+    );
+    const notice = { monitor: m, change: m.history[0] };
+    const send = vi.fn().mockResolvedValue(undefined);
+    await deliver(notice, [{ id: 'fake', send }]);
+    expect(send).toHaveBeenCalledWith(notice);
+    await expect(
+      deliver(notice, [
+        {
+          id: 'broken',
+          send: async () => {
+            throw new Error('disabled');
+          },
+        },
+      ]),
+    ).rejects.toThrow('disabled');
+  });
+});
