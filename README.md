@@ -76,19 +76,21 @@ needed. Deleting a monitor discards its pending notifications and local history.
 
 ## Permissions and privacy
 
-| Permission                        | Purpose                                                          |
-| --------------------------------- | ---------------------------------------------------------------- |
-| `sidePanel`                       | Monitor management beside the current page                       |
-| `activeTab`                       | Identify the page explicitly chosen through the extension action |
-| Optional HTTP/HTTPS origin access | Read only user-approved sites and fetch monitored URLs           |
-| `scripting`                       | Isolated element picker and text extraction                      |
-| `alarms`                          | Scheduled checks and notification recovery                       |
-| `storage`                         | Local settings, snapshots, history, and temporary picker state   |
-| `offscreen`                       | Parse fetched HTML in a document without executing site code     |
-| `notifications`                   | Desktop change alerts                                            |
+| Permission                        | Purpose                                                                |
+| --------------------------------- | ---------------------------------------------------------------------- |
+| `sidePanel`                       | Monitor management beside the current page                             |
+| `tabs`                            | Identify the current tab when selecting from the persistent side panel |
+| Optional HTTP/HTTPS origin access | Read only user-approved sites and fetch monitored URLs                 |
+| `scripting`                       | Isolated element picker and text extraction                            |
+| `alarms`                          | Scheduled checks and notification recovery                             |
+| `storage`                         | Local settings, snapshots, history, and temporary picker state         |
+| `offscreen`                       | Parse fetched HTML in a document without executing site code           |
+| `notifications`                   | Desktop change alerts                                                  |
 
-No blanket persistent site access, `tabs`, `cookies`, or `unlimitedStorage`
-permission is requested. Site grants are origin-scoped (all paths on that site);
+No blanket persistent site access, `cookies`, or `unlimitedStorage` permission is
+requested. The `tabs` permission exposes tab URLs/titles so the picker can identify
+a newly visited site before requesting its origin permission; browsing history is
+not recorded. Site grants are origin-scoped (all paths on that site);
 checks target the saved URL. User-triggered page loads and checks contact the
 monitored site with the browser session. Page content is stored locally, never
 sent to a monitoring service. Notifications may display selected text on screen.

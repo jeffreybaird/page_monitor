@@ -484,3 +484,141 @@ test('tests selector text before saving without creating a monitor or notificati
   expect(reply.ok).toBe(false);
   expect((await rpc({ type: 'list' })).monitors).toHaveLength(0);
 });
+
+test('actual side-panel picker identifies an ungranted tab and selects live replacement content', async () => {
+  const page = await context.newPage();
+  await page.goto(`${base}/`);
+  const windowId = await panel.evaluate(
+    async () => (await chrome.windows.getCurrent()).id,
+  );
+  if (windowId === undefined) throw new Error('No window');
+  await panel.evaluate(
+    (windowId) => chrome.sidePanel.open({ windowId }),
+    windowId,
+  );
+  const cdp = await context.newCDPSession(panel);
+  const original = (await cdp.send('Target.getTargetInfo')).targetInfo.targetId;
+  const targets = await cdp.send('Target.getTargets');
+  const side = targets.targetInfos.find(
+    (t) => t.url === panel.url() && t.targetId !== original,
+  );
+  if (!side) throw new Error('No actual side-panel target');
+  const { sessionId } = await cdp.send('Target.attachToTarget', {
+    targetId: side.targetId,
+    flatten: false,
+  });
+  let commandId = 0;
+  async function evaluate(expression: string): Promise<unknown> {
+    const id = ++commandId;
+    return new Promise((resolve, reject) => {
+      const timeout = setTimeout(() => {
+        cdp.off('Target.receivedMessageFromTarget', receive);
+        reject(new Error('Side-panel evaluation timed out'));
+      }, 5000);
+      function receive(event: { sessionId: string; message: string }) {
+        if (event.sessionId !== sessionId) return;
+        const reply = JSON.parse(event.message);
+        if (reply.id !== id) return;
+        clearTimeout(timeout);
+        cdp.off('Target.receivedMessageFromTarget', receive);
+        if (reply.error || reply.result?.exceptionDetails)
+          reject(new Error(JSON.stringify(reply)));
+        else resolve(reply.result?.result?.value);
+      }
+      cdp.on('Target.receivedMessageFromTarget', receive);
+      void cdp
+        .send('Target.sendMessageToTarget', {
+          sessionId,
+          message: JSON.stringify({
+            id,
+            method: 'Runtime.evaluate',
+            params: {
+              expression,
+              returnByValue: true,
+              awaitPromise: true,
+              userGesture: true,
+            },
+          }),
+        })
+        .catch(reject);
+    });
+  }
+  await expect
+    .poll(() => evaluate(`Boolean(document.querySelector('button.pick'))`))
+    .toBe(true);
+  await panel.evaluate(
+    async (origin) => chrome.permissions.remove({ origins: [origin] }),
+    `${base}/*`,
+  );
+  await page.bringToFront();
+  // Only the native permission answer is stubbed; actual side-panel tab resolution is real.
+  await evaluate(
+    `window.fixturePermissionRequest = chrome.permissions.request; chrome.permissions.request = async () => false; document.querySelector('button.pick').click();`,
+  );
+  await expect
+    .poll(() => evaluate(`document.querySelector('.status').textContent`))
+    .toBe(
+      'Site access was denied. Allow access to select and monitor this page.',
+    );
+  await expect(page.locator('[data-page-monitor-overlay]')).toHaveCount(0);
+  await evaluate(
+    `chrome.permissions.request = window.fixturePermissionRequest;`,
+  );
+  const settings = await context.newPage();
+  await settings.goto('chrome://extensions');
+  await settings.evaluate(
+    async ({ id, origin }) =>
+      (
+        chrome as unknown as {
+          developerPrivate: {
+            addHostPermission: (id: string, host: string) => Promise<void>;
+          };
+        }
+      ).developerPrivate.addHostPermission(id, origin),
+    { id: new URL(panel.url()).host, origin: `${base}/*` },
+  );
+  await settings.close();
+  await page.bringToFront();
+  await evaluate(`document.querySelector('button.pick').click();`);
+  await expect(page.locator('[data-page-monitor-overlay]')).toHaveCount(1);
+  await page.locator('#price').hover();
+  // Mimic a live framework replacing the hovered node without moving the pointer.
+  await page.evaluate(() => {
+    const old = document.querySelector('#price');
+    if (!old) throw new Error('No price');
+    const next = document.createElement('p');
+    next.id = 'replacement';
+    next.textContent = '42';
+    old.replaceWith(next);
+  });
+  await page.locator('#replacement').dispatchEvent('click');
+  await expect
+    .poll(() =>
+      evaluate(
+        `document.querySelector('input[aria-label="CSS selector"]').value`,
+      ),
+    )
+    .toBe('#replacement');
+  await expect(page.locator('[data-page-monitor-overlay]')).toHaveCount(0);
+  expect((await rpc({ type: 'list' })).draft?.sample).toBe('42');
+  await cdp.detach();
+});
+
+test('picker keeps a failed acknowledgement visible instead of discarding the selection', async () => {
+  const page = await context.newPage();
+  await page.goto(`${base}/`);
+  const tabId = await panel.evaluate(
+    async (url) => (await chrome.tabs.query({ url }))[0]?.id,
+    `${base}/`,
+  );
+  if (tabId === undefined) throw new Error('No tab');
+  await rpc({ type: 'pick', tabId, url: `${base}/` });
+  await panel.evaluate(() => chrome.storage.session.remove('pendingPick'));
+  await page.locator('#price').click();
+  await expect(page.getByRole('status')).toContainText(
+    'Could not select this region:',
+  );
+  await expect(page.locator('[data-page-monitor-overlay]')).toHaveCount(1);
+  await page.keyboard.press('Escape');
+  await expect(page.locator('[data-page-monitor-overlay]')).toHaveCount(0);
+});

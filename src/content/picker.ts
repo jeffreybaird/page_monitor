@@ -6,7 +6,7 @@ export function startPicker(token: string): void {
   host.dataset.pageMonitorOverlay = 'true';
   host.style.cssText =
     'position:fixed;inset:0;pointer-events:none;z-index:2147483647';
-  const shadow = host.attachShadow({ mode: 'closed' });
+  const shadow = host.attachShadow({ mode: 'open' });
   const style = document.createElement('style');
   style.textContent =
     '.box{position:fixed;border:3px solid #13694f;background:#34b68722;box-sizing:border-box}.hint{position:fixed;top:12px;left:12px;max-width:420px;background:#16302a;color:white;padding:12px 16px;border-radius:12px;font:14px/1.5 system-ui;box-shadow:0 4px 20px #0004}';
@@ -24,8 +24,12 @@ export function startPicker(token: string): void {
     document.activeElement !== document.body
       ? document.activeElement
       : null;
+  let submitting = false;
   const draw = () => {
-    if (!selected) return;
+    if (!selected?.isConnected) {
+      box.style.display = 'none';
+      return;
+    }
     const r = selected.getBoundingClientRect();
     box.style.cssText = `left:${r.left}px;top:${r.top}px;width:${r.width}px;height:${r.height}px`;
   };
@@ -37,16 +41,49 @@ export function startPicker(token: string): void {
     window.removeEventListener('scroll', draw, true);
     host.remove();
   };
-  const send = (payload: object) => {
-    void chrome.runtime
-      .sendMessage({ type: 'picked', token, ...payload })
-      .catch(() => {});
-    cleanup();
+  const send = async (payload: object, cancelled = false) => {
+    if (cancelled) {
+      cleanup();
+      void chrome.runtime
+        .sendMessage({ type: 'picked', token, ...payload })
+        .catch(() => {});
+      return;
+    }
+    if (submitting) return;
+    submitting = true;
+    hint.textContent = 'Sending selection…';
+    try {
+      const reply: unknown = await chrome.runtime.sendMessage({
+        type: 'picked',
+        token,
+        ...payload,
+      });
+      if (
+        !reply ||
+        typeof reply !== 'object' ||
+        !('ok' in reply) ||
+        reply.ok !== true
+      ) {
+        const reason =
+          reply &&
+          typeof reply === 'object' &&
+          'error' in reply &&
+          typeof reply.error === 'string'
+            ? reply.error
+            : 'The extension did not acknowledge the selection.';
+        throw new Error(reason);
+      }
+      cleanup();
+    } catch (error) {
+      hint.textContent = `Could not select this region: ${error instanceof Error ? error.message : 'Connection lost.'} Start the picker again from the side panel, or press Escape to cancel.`;
+    } finally {
+      submitting = false;
+    }
   };
   const select = () => {
-    if (!selected) {
+    if (!selected?.isConnected) {
       hint.textContent =
-        'Point at a region, or press ↓ to start at the page body.';
+        'The page changed. Point at a region again, or press ↓ to start at the page body.';
       return;
     }
     if (
@@ -82,6 +119,12 @@ export function startPicker(token: string): void {
       selector = part + (selector ? ' > ' + selector : '');
       node = node.parentElement;
     }
+    const matches = selector ? document.querySelectorAll(selector) : [];
+    if (matches.length !== 1 || matches[0] !== selected) {
+      hint.textContent =
+        'This region cannot be selected reliably. Choose a smaller region.';
+      return;
+    }
     const copy = selected.cloneNode(true) as HTMLElement;
     copy
       .querySelectorAll(
@@ -93,7 +136,7 @@ export function startPicker(token: string): void {
       hint.textContent = 'Select a smaller, nonempty text region.';
       return;
     }
-    send({ selector, sample, title: document.title });
+    void send({ selector, sample, title: document.title });
   };
   function move(event: PointerEvent) {
     const target = event.target;
@@ -105,6 +148,16 @@ export function startPicker(token: string): void {
   function click(event: MouseEvent) {
     event.preventDefault();
     event.stopImmediatePropagation();
+    const target =
+      event.target instanceof HTMLElement
+        ? event.target
+        : event.target instanceof Element
+          ? event.target.parentElement
+          : null;
+    if (target && target !== host && !host.contains(target)) {
+      selected = target;
+      draw();
+    }
     select();
   }
   function key(event: KeyboardEvent) {
@@ -112,7 +165,7 @@ export function startPicker(token: string): void {
       return;
     event.preventDefault();
     event.stopImmediatePropagation();
-    if (event.key === 'Escape') send({ cancelled: true });
+    if (event.key === 'Escape') void send({ cancelled: true }, true);
     else if (event.key === 'Enter') select();
     else {
       const candidate =
@@ -130,6 +183,8 @@ export function startPicker(token: string): void {
   document.addEventListener('click', click, true);
   document.addEventListener('keydown', key, true);
   window.addEventListener('scroll', draw, true);
-  const timeout = setTimeout(() => send({ cancelled: true }), 120000);
+  const timeout = setTimeout(() => {
+    void send({ cancelled: true }, true);
+  }, 120000);
   draw();
 }

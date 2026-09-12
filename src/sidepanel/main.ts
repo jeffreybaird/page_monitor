@@ -135,7 +135,6 @@ url.addEventListener('input', invalidatePreview);
 selector.addEventListener('input', invalidatePreview);
 let editingId: string | null = null;
 let draftKey = '';
-let activeTab: chrome.tabs.Tab | undefined;
 let monitors: Monitor[] = [];
 let busy = false;
 const picker = button(
@@ -259,16 +258,6 @@ async function refresh(): Promise<void> {
     fail(error);
   }
 }
-async function refreshTab(): Promise<void> {
-  try {
-    [activeTab] = await chrome.tabs.query({
-      active: true,
-      currentWindow: true,
-    });
-  } catch {
-    activeTab = undefined;
-  }
-}
 async function testSelector(): Promise<void> {
   let generation = previewGeneration;
   try {
@@ -319,7 +308,10 @@ async function testSelector(): Promise<void> {
 }
 async function pick(): Promise<void> {
   try {
-    const tab = activeTab;
+    const [tab] = await chrome.tabs.query({
+      active: true,
+      currentWindow: true,
+    });
     if (!tab?.url || tab.id === undefined)
       throw new Error(
         'Open a website and click the Page Monitor toolbar icon first.',
@@ -589,11 +581,4 @@ function renderMonitors(): void {
 chrome.storage.onChanged.addListener(() => {
   void refresh();
 });
-chrome.tabs.onActivated.addListener(() => {
-  void refreshTab();
-});
-chrome.tabs.onUpdated.addListener(() => {
-  void refreshTab();
-});
-void refreshTab();
 void refresh();
