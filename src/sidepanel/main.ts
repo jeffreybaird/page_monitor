@@ -44,7 +44,9 @@ function field(
   const label = el('label');
   if (!input.hasAttribute('aria-label'))
     input.setAttribute('aria-label', labelText);
-  label.append(el('span', labelText), input);
+  if (input instanceof HTMLInputElement && input.type === 'checkbox')
+    label.append(input, el('span', labelText));
+  else label.append(el('span', labelText), input);
   return label;
 }
 function input(type: string, value = ''): HTMLInputElement {
@@ -65,12 +67,8 @@ function select(options: [string, string][]): HTMLSelectElement {
 const app = document.querySelector('#app');
 if (!app) throw new Error('Missing side panel root.');
 const header = el('header');
-header.append(
-  el('p', 'YOUR QUIET LOOKOUT', 'eyebrow'),
-  el('h1', 'Page Monitor'),
-  el('p', 'Your pages, without the constant checking.', 'intro'),
-);
-const local = el('p', 'On this device · Uses your browser session', 'local');
+header.append(el('h1', 'Page Monitor'));
+const local = el('p', 'Local monitoring · Chrome must be running', 'local');
 const status = el('p', '', 'status');
 status.setAttribute('role', 'status');
 status.setAttribute('aria-live', 'polite');
@@ -101,8 +99,8 @@ const units = select([
 ]);
 units.setAttribute('aria-label', 'Check interval unit');
 const durationMode = select([
-  ['forever', 'Until I stop it'],
-  ['duration', 'For a set duration'],
+  ['forever', 'Until stopped'],
+  ['duration', 'Set duration'],
 ]);
 const duration = input('number', '60');
 duration.min = '1';
@@ -125,7 +123,7 @@ sample.setAttribute('aria-label', 'Selected text preview');
 let previewGeneration = 0;
 const selectorStatus = el(
   'p',
-  'Test a selector to confirm its current text before saving.',
+  'Preview the selected text before saving.',
   'hint',
 );
 selectorStatus.setAttribute('role', 'status');
@@ -175,7 +173,7 @@ async function storeEditor(value: EditorDraft | null): Promise<boolean> {
     await saveEditorDraft(await editorWindow, value);
     if (version === editorVersion) {
       editorStatus.textContent = value
-        ? 'Draft saved for this browser session.'
+        ? 'Draft saved until Chrome closes.'
         : '';
       editorStatus.classList.remove('error');
     }
@@ -222,7 +220,7 @@ const cancel = button(
 cancel.hidden = true;
 const editWarning = el(
   'p',
-  'Changing the page, selected region, or rendering option starts a new baseline and clears this monitor’s saved history.',
+  'Changing the URL, selector, or JavaScript setting clears saved history and starts a new baseline.',
   'hint',
 );
 editWarning.hidden = true;
@@ -237,7 +235,7 @@ form.append(
   field('Render JavaScript for closed-tab checks', renderJavaScript),
   el(
     'p',
-    'Automatically uses a temporary inactive tab when page text is missing. Enable this for pages that show placeholder text until JavaScript runs. You will be alerted before the first temporary-tab check.',
+    'Enable if the page shows placeholder text before loading. Missing content triggers this automatically. You’ll be notified before the first temporary tab opens.',
     'hint',
   ),
   testSelectorButton,
@@ -284,7 +282,7 @@ const filter = select([
   ['all', 'All monitors'],
   ['unread', 'Unread changes'],
   ['attention', 'Needs attention'],
-  ['watching', 'Watching'],
+  ['watching', 'Active'],
   ['paused', 'Paused or finished'],
 ]);
 filter.setAttribute('aria-label', 'Filter monitors');
@@ -293,7 +291,7 @@ filters.append(search, filter);
 search.addEventListener('input', renderMonitors);
 filter.addEventListener('change', renderMonitors);
 const section = el('section');
-const listHeading = el('h2', 'Your monitors');
+const listHeading = el('h2', 'Monitors');
 listHeading.tabIndex = -1;
 const count = el('span', '0', 'count');
 listHeading.append(count);
@@ -370,7 +368,7 @@ function applyDraft(draft: Draft | null): void {
   selector.value = draft.selector;
   if (!name.value) name.value = draft.title.slice(0, 100);
   sample.textContent = draft.sample;
-  message('Region selected. Choose a schedule, then save your monitor.');
+  message('Region selected.');
   editorTouched = true;
   void storeEditor(editorValue())
     .then((saved) => {
@@ -544,7 +542,7 @@ form.addEventListener('submit', (event) => {
       applyView(view);
       form.hidden = true;
       newMonitor.focus();
-      message('Monitor saved. Changes will appear below.');
+      message('Monitor saved.');
     } catch (error) {
       fail(error);
     } finally {
@@ -638,7 +636,7 @@ function renderMonitors(): void {
       monitor.enabled &&
       !(monitor.endsAt !== null && monitor.endsAt <= Date.now()),
   ).length;
-  overview.textContent = `${active} watching · ${unread} unread${attention ? ` · ${attention} need attention` : ''}`;
+  overview.textContent = `${active} active · ${unread} unread${attention ? ` · ${attention} need attention` : ''}`;
   filters.hidden = monitors.length === 0;
   toolbar.hidden = monitors.length === 0;
   list.querySelector('.empty')?.remove();
@@ -673,10 +671,10 @@ function renderMonitors(): void {
   if (!monitors.length) {
     const empty = el('div', '', 'empty');
     empty.append(
-      el('h3', 'A little less checking.'),
+      el('h3', 'No monitors'),
       el(
         'p',
-        'Pick a region you care about. We’ll let you know when its text changes.',
+        'Add a monitor to receive notifications when selected text changes.',
       ),
     );
     list.append(empty);
@@ -728,6 +726,13 @@ function renderMonitors(): void {
     if (focused) card.dataset.focusAction = focused;
     card.hidden = !visible(m);
     card.setAttribute('aria-busy', String(inProgress));
+    card.dataset.state = inProgress
+      ? 'checking'
+      : !m.enabled
+        ? 'paused'
+        : m.error
+          ? 'error'
+          : 'active';
     const top = el('div', '', 'card-top');
     top.append(
       el('h3', m.name),
@@ -742,14 +747,15 @@ function renderMonitors(): void {
             : m.error
               ? 'Needs attention'
               : m.snapshot === null
-                ? 'Getting baseline'
-                : 'Watching',
+                ? 'First check pending'
+                : 'Active',
         'pill',
       ),
     );
     const link = el('a', m.url, 'url');
     link.dataset.action = 'open';
     link.href = webUrl(m.url);
+    link.title = m.url;
     link.target = '_blank';
     link.rel = 'noopener noreferrer';
     card.append(
@@ -770,7 +776,7 @@ function renderMonitors(): void {
       card.append(
         el(
           'p',
-          'JavaScript rendering required: closed-tab checks use a temporary inactive tab with your session.',
+          'Requires JavaScript. Checks without an open tab use a temporary background tab.',
           'hint',
         ),
       );
@@ -1001,8 +1007,7 @@ async function restoreEditor(): Promise<void> {
         cancel.hidden = false;
         initialized = true;
         form.hidden = false;
-        editorStatus.textContent =
-          'Restored your unfinished draft. Review it before saving.';
+        editorStatus.textContent = 'Draft restored.';
         invalidatePreview();
       }
     }

@@ -9,7 +9,7 @@ export function startPicker(token: string): void {
   const shadow = host.attachShadow({ mode: 'open' });
   const style = document.createElement('style');
   style.textContent =
-    '.box{position:fixed;border:3px solid #13694f;background:#34b68722;box-sizing:border-box}.hint{position:fixed;top:12px;left:12px;max-width:420px;background:#16302a;color:white;padding:12px 16px;border-radius:12px;font:14px/1.5 system-ui;box-shadow:0 4px 20px #0004}';
+    '.box{position:fixed;border:3px solid #1967d2;background:#1967d222;box-sizing:border-box}.hint{position:fixed;top:12px;left:12px;max-width:420px;background:#202124;color:white;padding:12px 16px;border-radius:4px;font:14px/1.5 system-ui;box-shadow:0 2px 6px #0003}';
   const box = document.createElement('div');
   box.className = 'box';
   const hint = document.createElement('div');

@@ -901,7 +901,7 @@ test('renders JavaScript with the session, warns once, and removes temporary tab
   });
   await expect(
     panel.getByText(
-      'JavaScript rendering required: closed-tab checks use a temporary inactive tab with your session.',
+      'Requires JavaScript. Checks without an open tab use a temporary background tab.',
       { exact: true },
     ),
   ).toBeVisible();
@@ -1122,7 +1122,7 @@ test('restores unfinished setup and edits, then clears drafts on save and cancel
   await panel.getByLabel('CSS selector', { exact: true }).fill('#price');
   await panel.getByLabel('Check every', { exact: true }).fill('3');
   await expect(panel.getByLabel('Editor draft status')).toHaveText(
-    'Draft saved for this browser session.',
+    'Draft saved until Chrome closes.',
   );
   await panel.close();
   panel = await context.newPage();
@@ -1149,7 +1149,7 @@ test('restores unfinished setup and edits, then clears drafts on save and cancel
     .getByLabel('Monitor name', { exact: true })
     .fill('Unfinished rename');
   await expect(panel.getByLabel('Editor draft status')).toHaveText(
-    'Draft saved for this browser session.',
+    'Draft saved until Chrome closes.',
   );
   await panel.close();
   panel = await context.newPage();
