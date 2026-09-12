@@ -23,6 +23,8 @@ const PREFIX = 'monitor:';
 const NOTIFY_ALARM = 'pending-notifications';
 // Single worker owns all read/modify/write operations. Persisted state is authoritative.
 let tail: Promise<unknown> = Promise.resolve();
+let checkingId: string | null = null;
+const requestedChecks = new Set<string>();
 function serial<T>(work: () => Promise<T>): Promise<T> {
   const task = tail.then(work);
   tail = task.catch(() => {});
@@ -36,6 +38,7 @@ function errorText(error: unknown): string {
 async function view(): Promise<View> {
   return {
     monitors: (await readState()).monitors,
+    checkingId,
     draft: draftValue((await chrome.storage.session.get('draft')).draft),
   };
 }
@@ -106,6 +109,8 @@ export async function checkMonitor(id: string): Promise<void> {
   m = state.monitors.find((m) => m.id === id);
   if (!m) return;
   try {
+    checkingId = id;
+    await chrome.storage.session.set({ checkingMonitor: id });
     if (m.history.length >= 10 && m.history.at(-1)?.delivered === false)
       throw new Error(
         'Notification backlog is full. Checks will resume after notifications can be delivered.',
@@ -151,11 +156,18 @@ export async function checkMonitor(id: string): Promise<void> {
     current.error = errorText(error);
     await writeState(failed);
     return;
+  } finally {
+    checkingId = null;
+    await chrome.storage.session.remove('checkingMonitor');
   }
   await notifyPending(id);
 }
 async function handle(request: Request): Promise<View> {
   if (request.type === 'list') return view();
+  if (request.type === 'clear-draft') {
+    await chrome.storage.session.remove('draft');
+    return view();
+  }
   if (request.type === 'test-selector') {
     const url = webUrl(request.url);
     const result = await readRegion(
@@ -276,6 +288,7 @@ async function handle(request: Request): Promise<View> {
       await writeState(state);
       await syncAlarm(m);
       await updateBadge(state.monitors);
+      await chrome.storage.session.remove('draft');
     }
     return view();
   }
@@ -374,10 +387,29 @@ chrome.runtime.onMessage.addListener((message: unknown, sender, respond) => {
     respond({ ok: false, error: 'Unauthorized or invalid request.' });
     return;
   }
-  void serial(() => handle(message)).then(
-    (value) => respond({ ok: true, value }),
-    (error) => respond({ ok: false, error: errorText(error) }),
-  );
+  if (
+    message.type === 'check' &&
+    (requestedChecks.has(message.id) || checkingId === message.id)
+  ) {
+    respond({
+      ok: false,
+      error: 'A check is already in progress for this monitor.',
+    });
+    return;
+  }
+  if (message.type === 'check') requestedChecks.add(message.id);
+  const operation =
+    message.type === 'list' || message.type === 'clear-draft'
+      ? ready.then(() => handle(message))
+      : serial(() => handle(message));
+  void operation
+    .finally(() => {
+      if (message.type === 'check') requestedChecks.delete(message.id);
+    })
+    .then(
+      (value) => respond({ ok: true, value }),
+      (error) => respond({ ok: false, error: errorText(error) }),
+    );
   return true;
 });
 async function initialize(): Promise<void> {
@@ -389,6 +421,7 @@ async function initialize(): Promise<void> {
   });
   await chrome.sidePanel.setPanelBehavior({ openPanelOnActionClick: true });
   await cleanupRenderingTabs();
+  await chrome.storage.session.remove('checkingMonitor');
   const state = await readState();
   let changed = false;
   for (const m of state.monitors) {
@@ -466,4 +499,5 @@ chrome.notifications.onClicked.addListener((notificationId) => {
     }
   }).catch(report);
 });
-void serial(initialize).catch(report);
+const ready = serial(initialize);
+void ready.catch(report);

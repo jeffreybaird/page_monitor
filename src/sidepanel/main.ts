@@ -139,6 +139,9 @@ let editingId: string | null = null;
 let draftKey = '';
 let monitors: Monitor[] = [];
 let busy = false;
+let checkingId: string | null = null;
+let viewVersion = 0;
+const pendingActions = new Map<string, string>();
 const picker = button(
   'Select region in current tab',
   () => {
@@ -153,13 +156,21 @@ submit.type = 'submit';
 const cancel = button(
   'Cancel edit',
   () => {
+    if (busy) return;
     resetForm();
+    void request({ type: 'clear-draft' }).catch(fail);
     form.hidden = monitors.length > 0;
     if (form.hidden) newMonitor.focus();
   },
   'quiet',
 );
 cancel.hidden = true;
+const editWarning = el(
+  'p',
+  'Changing the page, selected region, or rendering option starts a new baseline and clears this monitor’s saved history.',
+  'hint',
+);
+editWarning.hidden = true;
 const actions = el('div', '', 'actions');
 actions.append(submit, cancel);
 form.append(
@@ -185,13 +196,16 @@ form.append(
   ),
   field('Monitor for', durationMode),
   durationField,
+  editWarning,
   actions,
 );
 let initialized = false;
 const newMonitor = button(
   'New monitor',
   () => {
+    if (busy) return;
     resetForm();
+    void request({ type: 'clear-draft' }).catch(fail);
     form.hidden = false;
     cancel.hidden = monitors.length === 0;
     picker.focus();
@@ -269,6 +283,7 @@ function resetForm(): void {
   interval.value = '5';
   duration.value = '60';
   editingId = null;
+  editWarning.hidden = true;
   formTitle.textContent = 'New monitor';
   submit.textContent = 'Start monitoring';
   cancel.hidden = true;
@@ -296,7 +311,9 @@ function applyDraft(draft: Draft | null): void {
   message('Region selected. Choose a schedule, then save your monitor.');
 }
 function applyView(view: View): void {
+  viewVersion++;
   monitors = view.monitors;
+  checkingId = view.checkingId ?? null;
   if (!initialized) {
     form.hidden = monitors.length > 0 && !view.draft;
     initialized = true;
@@ -304,11 +321,25 @@ function applyView(view: View): void {
   renderMonitors();
   applyDraft(view.draft);
 }
+let refreshing = false;
+let refreshAgain = false;
 async function refresh(): Promise<void> {
+  refreshAgain = true;
+  if (refreshing) return;
+  refreshing = true;
   try {
-    applyView(await request({ type: 'list' }));
-  } catch (error) {
-    fail(error);
+    do {
+      refreshAgain = false;
+      const version = viewVersion;
+      try {
+        const view = await request({ type: 'list' });
+        if (version === viewVersion) applyView(view);
+      } catch (error) {
+        fail(error);
+      }
+    } while (refreshAgain);
+  } finally {
+    refreshing = false;
   }
 }
 async function testSelector(): Promise<void> {
@@ -445,6 +476,7 @@ function edit(m: Monitor): void {
   if (busy) return;
   invalidatePreview();
   editingId = m.id;
+  editWarning.hidden = false;
   form.hidden = false;
   formTitle.textContent = 'Edit monitor';
   name.value = m.name;
@@ -466,11 +498,44 @@ function edit(m: Monitor): void {
   form.scrollIntoView({ block: 'start', behavior: 'instant' });
 }
 async function mutate(requestValue: Request, success: string): Promise<void> {
+  if (!('id' in requestValue) || pendingActions.has(requestValue.id)) return;
+  const id = requestValue.id;
+  const before = monitors.find((m) => m.id === id);
+  pendingActions.set(id, requestValue.type);
+  viewVersion++;
+  renderMonitors();
+  if (requestValue.type === 'check')
+    message('Checking page… JavaScript pages can take up to 20 seconds.');
   try {
-    applyView(await request(requestValue));
-    message(success);
+    const view = await request(requestValue);
+    applyView(view);
+    const updated = view.monitors.find((m) => m.id === id);
+    if (
+      requestValue.type === 'check' &&
+      updated &&
+      !updated.enabled &&
+      updated.endsAt !== null &&
+      updated.endsAt <= Date.now()
+    )
+      message(
+        'Monitoring duration has ended. Resume to start a new monitoring period.',
+      );
+    else if (requestValue.type === 'check' && updated?.error)
+      message(`Check failed: ${updated.error}`, true);
+    else if (requestValue.type === 'check')
+      message(
+        before?.snapshot === null
+          ? 'Baseline saved. Future changes will notify you.'
+          : before?.snapshot !== updated?.snapshot
+            ? 'Change detected. Your history has been updated.'
+            : 'Checked just now. No change detected.',
+      );
+    else message(success);
   } catch (error) {
     fail(error);
+  } finally {
+    pendingActions.delete(id);
+    renderMonitors();
   }
 }
 const cards = new Map<string, { node: HTMLElement; value: string }>();
@@ -528,34 +593,46 @@ function renderMonitors(): void {
   }
   for (const m of monitors) {
     const previous = cards.get(m.id);
-    const serialized = JSON.stringify(m);
+    const inProgress = pendingActions.has(m.id) || checkingId === m.id;
+    const serialized = JSON.stringify([
+      m,
+      pendingActions.get(m.id),
+      checkingId === m.id,
+    ]);
     if (previous) previous.node.hidden = !visible(m);
     if (previous?.value === serialized) continue;
     const focused = previous?.node.contains(document.activeElement)
-      ? (document.activeElement as HTMLElement).dataset.action
+      ? ((document.activeElement as HTMLElement).dataset.action ??
+        previous?.node.dataset.focusAction)
       : undefined;
     const open = previous?.node.querySelector('details')?.open ?? false;
     const card = el('article', '', 'monitor');
     card.setAttribute('aria-label', m.name);
+    card.tabIndex = -1;
+    if (focused) card.dataset.focusAction = focused;
     card.hidden = !visible(m);
+    card.setAttribute('aria-busy', String(inProgress));
     const top = el('div', '', 'card-top');
     top.append(
       el('h3', m.name),
       el(
         'span',
-        !m.enabled
-          ? m.endsAt !== null && m.endsAt <= Date.now()
-            ? 'Finished'
-            : 'Paused'
-          : m.error
-            ? 'Needs attention'
-            : m.snapshot === null
-              ? 'Getting baseline'
-              : 'Watching',
+        checkingId === m.id || pendingActions.get(m.id) === 'check'
+          ? 'Checking…'
+          : !m.enabled
+            ? m.endsAt !== null && m.endsAt <= Date.now()
+              ? 'Finished'
+              : 'Paused'
+            : m.error
+              ? 'Needs attention'
+              : m.snapshot === null
+                ? 'Getting baseline'
+                : 'Watching',
         'pill',
       ),
     );
     const link = el('a', m.url, 'url');
+    link.dataset.action = 'open';
     link.href = webUrl(m.url);
     link.target = '_blank';
     link.rel = 'noopener noreferrer';
@@ -598,12 +675,21 @@ function renderMonitors(): void {
     ): HTMLButtonElement => {
       const b = button(label, handler, 'small');
       b.dataset.action = key;
+      b.disabled = inProgress;
       controls.append(b);
       return b;
     };
-    action('Check now', 'check', () => {
-      void mutate({ type: 'check', id: m.id }, 'Check completed.');
-    });
+    const check = action(
+      checkingId === m.id || pendingActions.get(m.id) === 'check'
+        ? 'Checking…'
+        : 'Check now',
+      'check',
+      () => {
+        void mutate({ type: 'check', id: m.id }, 'Check completed.');
+      },
+    );
+    check.disabled = inProgress || !m.enabled;
+    if (!m.enabled) check.title = 'Resume this monitor before checking.';
     action(m.enabled ? 'Pause' : 'Resume', 'toggle', () => {
       void mutate(
         { type: 'toggle', id: m.id, enabled: !m.enabled },
@@ -627,6 +713,7 @@ function renderMonitors(): void {
       'danger',
     );
     confirmButton.dataset.action = 'confirm-delete';
+    confirmButton.disabled = inProgress;
     const keep = button('Keep monitor', () => {
       confirm.hidden = true;
       remove.focus();
@@ -657,6 +744,7 @@ function renderMonitors(): void {
         'small',
       );
       read.dataset.action = 'read';
+      read.disabled = inProgress;
       history.append(read);
     }
     for (const change of m.history) {
@@ -674,10 +762,14 @@ function renderMonitors(): void {
     if (previous) previous.node.replaceWith(card);
     else list.append(card);
     cards.set(m.id, { node: card, value: serialized });
-    if (focused)
-      card
-        .querySelector<HTMLButtonElement>(`[data-action="${focused}"]`)
-        ?.focus();
+    if (focused) {
+      const target = Array.from(
+        card.querySelectorAll<HTMLElement>('[data-action]'),
+      ).find((node) => node.dataset.action === focused);
+      if (target instanceof HTMLButtonElement && target.disabled)
+        card.focus({ preventScroll: true });
+      else target?.focus({ preventScroll: true });
+    }
   }
   if (!shown && monitors.length) {
     const empty = el('div', '', 'empty');
@@ -698,7 +790,11 @@ function renderMonitors(): void {
     list.append(empty);
   }
 }
-chrome.storage.onChanged.addListener(() => {
-  void refresh();
+chrome.storage.onChanged.addListener((changes, area) => {
+  if (
+    (area === 'local' && changes.pageMonitor) ||
+    (area === 'session' && (changes.draft || changes.checkingMonitor))
+  )
+    void refresh();
 });
 void refresh();

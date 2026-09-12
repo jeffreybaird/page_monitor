@@ -19,6 +19,8 @@ let price = '40';
 let sessionRequired = false;
 let requests = 0;
 let loggedIn = true;
+let holdCheck = false;
+let releaseCheck: (() => void) | undefined;
 async function rpc(request: Request): Promise<View> {
   const reply: Reply = await panel.evaluate(
     async (request) => chrome.runtime.sendMessage(request),
@@ -32,6 +34,8 @@ test.beforeEach(async () => {
   sessionRequired = false;
   requests = 0;
   loggedIn = true;
+  holdCheck = false;
+  releaseCheck = undefined;
   server = createServer((req, res) => {
     requests++;
     if (
@@ -40,6 +44,13 @@ test.beforeEach(async () => {
     ) {
       res.writeHead(302, { location: '/login' });
       res.end();
+      return;
+    }
+    if (req.url === '/deferred' && holdCheck) {
+      releaseCheck = () => {
+        res.writeHead(200, { 'content-type': 'text/html' });
+        res.end('<p id="price">40</p>');
+      };
       return;
     }
     if (req.url === '/placeholder') {
@@ -862,6 +873,11 @@ test('renders JavaScript with the session, warns once, and removes temporary tab
     },
   });
   const id = view.monitors[0].id;
+  await expect
+    .poll(async () => (await rpc({ type: 'list' })).monitors[0]?.snapshot, {
+      timeout: 25000,
+    })
+    .toBe('40');
   const initial = (await rpc({ type: 'list' })).monitors[0];
   expect(
     initial,
@@ -987,4 +1003,63 @@ test('opens on the dashboard, filters monitors, and keeps creation a deliberate 
     path: 'test-results/dashboard.png',
     fullPage: true,
   });
+});
+
+test('keeps the dashboard responsive during a check and reports its real outcome', async () => {
+  const view = await rpc({
+    type: 'create',
+    input: {
+      name: 'Slow page',
+      url: `${base}/deferred`,
+      selector: '#price',
+      intervalSeconds: 30,
+      durationMinutes: null,
+    },
+  });
+  const id = view.monitors[0].id;
+  await waitForBaseline();
+  const card = panel.getByRole('article', { name: 'Slow page', exact: true });
+  holdCheck = true;
+  await card.getByRole('button', { name: 'Check now', exact: true }).click();
+  await expect.poll(() => !!releaseCheck).toBe(true);
+  await expect(
+    card.getByRole('button', { name: 'Checking…', exact: true }),
+  ).toBeDisabled();
+  await expect(
+    card.getByRole('button', { name: 'Pause', exact: true }),
+  ).toBeDisabled();
+  const otherPanel = await context.newPage();
+  await otherPanel.goto(panel.url());
+  await expect(
+    otherPanel.getByRole('article', { name: 'Slow page', exact: true }),
+  ).toBeVisible();
+  await expect(
+    otherPanel
+      .getByRole('article', { name: 'Slow page', exact: true })
+      .getByRole('button', { name: 'Checking…', exact: true }),
+  ).toBeDisabled();
+  await expect(rpc({ type: 'check', id })).rejects.toThrow(
+    'already in progress',
+  );
+  holdCheck = false;
+  releaseCheck?.();
+  await expect(
+    panel.getByText('Checked just now. No change detected.', { exact: true }),
+  ).toBeVisible();
+  await expect(
+    card.getByRole('button', { name: 'Check now', exact: true }),
+  ).toBeEnabled();
+  await expect(
+    card.getByRole('button', { name: 'Check now', exact: true }),
+  ).toBeFocused();
+  sessionRequired = true;
+  loggedIn = false;
+  await card.getByRole('button', { name: 'Check now', exact: true }).click();
+  await expect(panel.getByText(/^Check failed:/)).toBeVisible();
+  expect((await rpc({ type: 'list' })).monitors[0].snapshot).toBe('40');
+  await card.getByRole('button', { name: 'Pause', exact: true }).click();
+  await expect(
+    card.getByRole('button', { name: 'Check now', exact: true }),
+  ).toBeDisabled();
+  await otherPanel.close();
 });

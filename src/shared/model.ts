@@ -46,6 +46,7 @@ export type MonitorInput = Pick<
 >;
 export type Request =
   | { type: 'list' }
+  | { type: 'clear-draft' }
   | { type: 'pick'; tabId: number; url: string }
   | {
       type: 'test-selector';
@@ -60,6 +61,7 @@ export type Request =
 export type View = {
   monitors: Monitor[];
   draft: Draft | null;
+  checkingId?: string | null;
   preview?: {
     url: string;
     selector: string;
@@ -117,7 +119,7 @@ export function inputValid(input: unknown): input is MonitorInput {
 export function requestValid(value: unknown): value is Request {
   if (!value || typeof value !== 'object') return false;
   const r = value as Record<string, unknown>;
-  if (r.type === 'list') return true;
+  if (r.type === 'list' || r.type === 'clear-draft') return true;
   if (r.type === 'pick') {
     try {
       return (

@@ -267,3 +267,52 @@ it('keeps baseline and visible rendering requirement if the warning fails', asyn
     error: 'Notifications disabled',
   });
 });
+
+it('keeps read-only views responsive during checks and rejects duplicate checks', async () => {
+  let finish: ((value: { text: string; source: string }) => void) | undefined;
+  mocks.readRegion.mockImplementation(
+    () =>
+      new Promise((resolve) => {
+        finish = resolve;
+      }),
+  );
+  const checking = rpc({ type: 'check', id: 'monitor1' });
+  await vi.waitFor(() => expect(finish).toBeDefined());
+  expect(await rpc({ type: 'list' })).toMatchObject({
+    ok: true,
+    value: { checkingId: 'monitor1' },
+  });
+  expect(await rpc({ type: 'check', id: 'monitor1' })).toMatchObject({
+    ok: false,
+    error: 'A check is already in progress for this monitor.',
+  });
+  finish?.({ text: '40', source: 'tab' });
+  expect(await checking).toMatchObject({ ok: true });
+  expect(await rpc({ type: 'list' })).toMatchObject({
+    ok: true,
+    value: { checkingId: null },
+  });
+});
+
+it('clears picker drafts through the trusted panel boundary and after editing', async () => {
+  const remove = vi.mocked(chrome.storage.session.remove);
+  remove.mockClear();
+  expect(
+    await rpc(
+      { type: 'clear-draft' },
+      { ...sender, url: 'https://example.com/' },
+    ),
+  ).toMatchObject({ ok: false });
+  expect(remove).not.toHaveBeenCalled();
+  expect(await rpc({ type: 'clear-draft' })).toMatchObject({ ok: true });
+  expect(remove).toHaveBeenCalledWith('draft');
+  remove.mockClear();
+  expect(
+    await rpc({
+      type: 'update',
+      id: 'monitor1',
+      input: { ...base(), name: 'Renamed' },
+    }),
+  ).toMatchObject({ ok: true });
+  expect(remove).toHaveBeenCalledWith('draft');
+});
