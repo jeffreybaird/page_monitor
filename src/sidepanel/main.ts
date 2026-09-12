@@ -1,4 +1,5 @@
 import './style.css';
+import { textDiff } from './diff';
 import {
   inputValid,
   originPattern,
@@ -605,7 +606,32 @@ function renderMonitors(): void {
       ? ((document.activeElement as HTMLElement).dataset.action ??
         previous?.node.dataset.focusAction)
       : undefined;
-    const open = previous?.node.querySelector('details')?.open ?? false;
+    const openDetails = new Set(
+      Array.from(
+        previous?.node.querySelectorAll<HTMLDetailsElement>('details[open]') ??
+          [],
+      ).map((node) => node.dataset.detailKey),
+    );
+    const scrollPositions = new Map(
+      Array.from(
+        previous?.node.querySelectorAll<HTMLElement>('[data-scroll-key]') ?? [],
+      ).map((node) => [node.dataset.scrollKey, node.scrollTop]),
+    );
+    const disclosure = (label: string, key: string, className: string) => {
+      const details = el('details', '', className);
+      details.dataset.detailKey = key;
+      details.setAttribute('aria-label', label);
+      details.open = openDetails.has(key);
+      const summary = el('summary', label);
+      summary.dataset.action = `detail:${key}`;
+      details.append(summary);
+      return details;
+    };
+    const snapshot = (text: string, key: string) => {
+      const pre = el('pre', text);
+      pre.dataset.scrollKey = key;
+      return pre;
+    };
     const card = el('article', '', 'monitor');
     card.setAttribute('aria-label', m.name);
     card.tabIndex = -1;
@@ -721,7 +747,8 @@ function renderMonitors(): void {
     keep.dataset.action = 'keep';
     confirm.append(confirmButton, keep);
     const history = el('details', '', 'history');
-    history.open = open;
+    history.dataset.detailKey = 'history';
+    history.open = openDetails.has('history');
     const summary = el('summary', `Change history (${m.history.length})`);
     summary.dataset.action = 'history';
     history.append(summary);
@@ -747,28 +774,77 @@ function renderMonitors(): void {
       read.disabled = inProgress;
       history.append(read);
     }
-    for (const change of m.history) {
-      const entry = el('div', '', 'change');
-      entry.append(
-        el('p', date(change.at), 'meta'),
-        el('h4', 'Before'),
-        el('pre', change.before),
-        el('h4', 'After'),
-        el('pre', change.after),
-      );
-      history.append(entry);
+    let historyLoaded = false;
+    const loadHistory = () => {
+      if (historyLoaded) return;
+      historyLoaded = true;
+      if (m.history.length)
+        history.append(
+          el(
+            'p',
+            'Underlined text was added. Struck-through text was removed.',
+            'hint',
+          ),
+        );
+      for (const change of m.history) {
+        const entry = el('div', '', 'change');
+        const highlighted = el('div', '', 'text-diff');
+        highlighted.setAttribute('aria-label', 'Highlighted text changes');
+        highlighted.dataset.scrollKey = `diff:${change.id}`;
+        for (const part of textDiff(change.before, change.after)) {
+          const node = el(
+            part.kind === 'added'
+              ? 'ins'
+              : part.kind === 'removed'
+                ? 'del'
+                : 'span',
+            part.text,
+          );
+          if (part.kind !== 'same')
+            node.title = part.kind === 'added' ? 'Added text' : 'Removed text';
+          highlighted.append(node);
+        }
+        const raw = disclosure(
+          'Full before and after',
+          `change:${change.id}`,
+          'raw-change',
+        );
+        raw.append(
+          el('h4', 'Before'),
+          snapshot(change.before, `before:${change.id}`),
+          el('h4', 'After'),
+          snapshot(change.after, `after:${change.id}`),
+        );
+        entry.append(el('p', date(change.at), 'meta'), highlighted, raw);
+        history.append(entry);
+      }
+    };
+    history.addEventListener('toggle', () => {
+      if (history.open) loadHistory();
+    });
+    if (history.open) loadHistory();
+    card.append(controls, confirm);
+    if (m.snapshot !== null) {
+      const currentText = disclosure('Current text', 'snapshot', 'snapshot');
+      currentText.append(snapshot(m.snapshot, 'snapshot'));
+      card.append(currentText);
     }
-    card.append(controls, confirm, history);
+    card.append(history);
     if (previous) previous.node.replaceWith(card);
     else list.append(card);
     cards.set(m.id, { node: card, value: serialized });
+    for (const node of card.querySelectorAll<HTMLElement>('[data-scroll-key]'))
+      node.scrollTop = scrollPositions.get(node.dataset.scrollKey) ?? 0;
     if (focused) {
       const target = Array.from(
         card.querySelectorAll<HTMLElement>('[data-action]'),
       ).find((node) => node.dataset.action === focused);
       if (target instanceof HTMLButtonElement && target.disabled)
         card.focus({ preventScroll: true });
-      else target?.focus({ preventScroll: true });
+      else
+        (target ?? history.querySelector('summary') ?? card).focus({
+          preventScroll: true,
+        });
     }
   }
   if (!shown && monitors.length) {

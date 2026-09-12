@@ -30,7 +30,8 @@ page; cancel and restart any active element picker on the target page.
    Every later text change creates a desktop notification and increments the badge.
 5. The panel opens on your monitors once setup is complete. Use **New monitor**
    to add another, or search and filter by unread changes, attention, or status.
-6. Inspect before/after history, mark alerts read, check now, pause/resume, edit,
+6. Inspect highlighted changes or expand full before/after snapshots. **Current
+   text** shows the latest successful reading. Mark alerts read, check now, pause/resume, edit,
    or delete a monitor from the side panel. Resuming starts its chosen duration anew.
 
 Existing matching tabs are read without reloading, including tabs in other normal

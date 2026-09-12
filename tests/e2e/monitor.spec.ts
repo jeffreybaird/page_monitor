@@ -1063,3 +1063,48 @@ test('keeps the dashboard responsive during a check and reports its real outcome
   ).toBeDisabled();
   await otherPanel.close();
 });
+
+test('highlights text changes, reveals full snapshots, and preserves reading position', async () => {
+  const id = await create();
+  await waitForBaseline();
+  price = '41';
+  await rpc({ type: 'check', id });
+  const card = panel.getByRole('article', {
+    name: 'Fixture price',
+    exact: true,
+  });
+  await card.getByText('Current text', { exact: true }).click();
+  await expect(
+    card.getByLabel('Current text', { exact: true }).locator('pre'),
+  ).toHaveText('41');
+  await card.getByText('Change history (1)', { exact: true }).click();
+  await expect(card.locator('ins')).toHaveText('41');
+  await expect(card.locator('del')).toHaveText('40');
+  await card.getByText('Full before and after', { exact: true }).click();
+  await expect(
+    card
+      .getByLabel('Full before and after', { exact: true })
+      .locator('pre')
+      .first(),
+  ).toHaveText('40');
+  await card.getByRole('link').focus();
+  await rpc({ type: 'check', id });
+  await expect(card.getByRole('link')).toBeFocused();
+  await expect(
+    card
+      .getByLabel('Full before and after', { exact: true })
+      .locator('pre')
+      .first(),
+  ).toBeVisible();
+  await expect(
+    card.getByLabel('Current text', { exact: true }).locator('pre'),
+  ).toBeVisible();
+  await card
+    .getByRole('button', { name: 'Mark changes read', exact: true })
+    .click();
+  await expect(card.getByText('1 unread change', { exact: true })).toHaveCount(
+    0,
+  );
+  await panel.setViewportSize({ width: 360, height: 800 });
+  await panel.screenshot({ path: 'test-results/history.png', fullPage: true });
+});

@@ -420,3 +420,37 @@ input[type='checkbox'] {
     flex-direction: column;
   }
 }
+
+.snapshot {
+  border-top: 1px solid #e2e5d9;
+  margin-top: 12px;
+}
+.snapshot + .history {
+  margin-top: 0;
+}
+.text-diff {
+  font-size: 13px;
+  line-height: 1.7;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  max-height: 240px;
+  overflow: auto;
+  padding: 12px;
+  border: 1px solid #d9ddd0;
+  border-radius: 8px;
+  background: #fffefb;
+}
+.text-diff ins {
+  color: #14532d;
+  background: #dcf3dc;
+  text-decoration-thickness: 2px;
+}
+.text-diff del {
+  color: #842719;
+  background: #fce4dc;
+  text-decoration-thickness: 2px;
+}
+.raw-change summary {
+  color: #53655c;
+  font-weight: 500;
+}
