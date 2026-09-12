@@ -143,3 +143,48 @@ describe('boundaries', () => {
     ).rejects.toThrow('disabled');
   });
 });
+
+describe('component selector paths', () => {
+  const path = (steps: unknown) => '@page-monitor:' + JSON.stringify(steps);
+  it('reads open shadow text and rejects inaccessible components in fetched HTML', () => {
+    document.body.innerHTML = '<price-card id="card"></price-card>';
+    const card = document.querySelector('#card');
+    if (!card) throw new Error('Missing fixture');
+    card.attachShadow({ mode: 'open' }).innerHTML =
+      '<p id="value">42<input value="private"><span hidden>hidden</span></p>';
+    const selector = path([{ css: '#card', via: 'shadow' }, { css: '#value' }]);
+    expect(extractRegion(selector)).toEqual({ text: '42' });
+    const inert = new DOMParser().parseFromString(
+      '<price-card id="card"></price-card>',
+      'text/html',
+    );
+    expect(extractRegion(selector, undefined, inert)).toEqual({
+      error: expect.stringContaining('open tab'),
+    });
+  });
+  it('rejects malformed, oversized, and excessive path steps', () => {
+    for (const selector of [
+      path(null),
+      path([]),
+      path([{}]),
+      path([{ css: 'body', via: 'execute' }, { css: 'p' }]),
+      path(Array.from({ length: 9 }, () => ({ css: 'body', via: 'shadow' }))),
+      '@page-monitor:' + 'x'.repeat(2000),
+    ]) {
+      expect(extractRegion(selector)).toHaveProperty('error');
+    }
+  });
+  it('does not traverse frames in inert background HTML', () => {
+    const doc = new DOMParser().parseFromString(
+      '<iframe id="frame" src="/frame"></iframe>',
+      'text/html',
+    );
+    expect(
+      extractRegion(
+        path([{ css: '#frame', via: 'frame' }, { css: 'p' }]),
+        undefined,
+        doc,
+      ),
+    ).toEqual({ error: expect.stringContaining('Keep the page open') });
+  });
+});

@@ -622,3 +622,133 @@ test('picker keeps a failed acknowledgement visible instead of discarding the se
   await page.keyboard.press('Escape');
   await expect(page.locator('[data-page-monitor-overlay]')).toHaveCount(0);
 });
+
+for (const framed of [false, true]) {
+  test(`picks and monitors nested web components${framed ? ' inside a same-origin frame' : ''}`, async () => {
+    const page = await context.newPage();
+    await page.goto(`${base}/`);
+    let target = page.mainFrame();
+    if (framed) {
+      await page.evaluate(() => {
+        const frame = document.createElement('iframe');
+        frame.id = 'embedded';
+        frame.src = '/frame';
+        document.body.append(frame);
+      });
+      await expect
+        .poll(() =>
+          page
+            .frames()
+            .find((frame) => frame.url().endsWith('/frame'))
+            ?.url(),
+        )
+        .toBe(`${base}/frame`);
+      const frame = page
+        .frames()
+        .find((frame) => frame.url().endsWith('/frame'));
+      if (!frame) throw new Error('No embedded frame');
+      target = frame;
+    }
+    await target.evaluate(() => {
+      const card = document.createElement('price-card');
+      card.setAttribute('aria-label', 'Product');
+      const outer = card.attachShadow({ mode: 'open' });
+      const detail = document.createElement('price-detail');
+      outer.append(detail);
+      const inner = detail.attachShadow({ mode: 'open' });
+      inner.innerHTML = '<p data-testid="amount">40</p>';
+      document.body.append(card);
+    });
+    const tabId = await panel.evaluate(
+      async (url) => (await chrome.tabs.query({ url }))[0]?.id,
+      `${base}/`,
+    );
+    if (tabId === undefined) throw new Error('No fixture tab');
+    await rpc({ type: 'pick', tabId, url: `${base}/` });
+    await target.getByTestId('amount').click();
+    const field = panel.getByLabel('CSS selector', { exact: true });
+    await expect(field).toHaveValue(/^@page-monitor:/);
+    const selector = await field.inputValue();
+    expect(selector).toContain('shadow');
+    expect(selector).not.toContain('aria-label');
+    if (framed) expect(selector).toContain('frame');
+    await panel
+      .getByRole('button', { name: 'Test selector', exact: true })
+      .click();
+    await expect(
+      panel.getByText(
+        'Valid selector · One region found in the open tab. Nothing has been saved.',
+        { exact: true },
+      ),
+    ).toBeVisible();
+    const view = await rpc({
+      type: 'create',
+      input: {
+        name: 'Component price',
+        url: `${base}/`,
+        selector,
+        intervalSeconds: 30,
+        durationMinutes: null,
+      },
+    });
+    const id = view.monitors[0].id;
+    await waitForBaseline();
+    const before = requests;
+    await target.getByTestId('amount').evaluate((element) => {
+      const replacement = document.createElement('p');
+      replacement.dataset.testid = 'amount';
+      replacement.textContent = '41';
+      element.replaceWith(replacement);
+    });
+    await target.evaluate(() =>
+      document
+        .querySelector('price-card')
+        ?.setAttribute('aria-label', 'Updated product'),
+    );
+    const checked = await rpc({ type: 'check', id });
+    expect(checked.monitors[0].snapshot).toBe('41');
+    expect(checked.monitors[0].history).toHaveLength(1);
+    expect(requests).toBe(before);
+    if (framed) {
+      await target.evaluate(() => {
+        document.title = 'Sign in';
+        const password = document.createElement('input');
+        password.type = 'password';
+        document.body.append(password);
+      });
+      const login = await rpc({ type: 'check', id });
+      expect(login.monitors[0].error).toContain('login form');
+      expect(login.monitors[0].snapshot).toBe('41');
+      expect(login.monitors[0].history).toHaveLength(1);
+    }
+    await page.close();
+    const closed = await rpc({ type: 'check', id });
+    expect(closed.monitors[0].error).toBeTruthy();
+    expect(closed.monitors[0].snapshot).toBe('41');
+    expect(closed.monitors[0].history).toHaveLength(1);
+  });
+}
+
+test('unavailable sandboxed frames and malformed paths cannot produce a preview or save state', async () => {
+  const page = await context.newPage();
+  await page.goto(`${base}/`);
+  await page.evaluate(() => {
+    const frame = document.createElement('iframe');
+    frame.id = 'isolated';
+    frame.sandbox.add('allow-scripts');
+    frame.srcdoc = '<p id="secret">Private frame content</p>';
+    document.body.append(frame);
+  });
+  for (const selector of [
+    '@page-monitor:' +
+      JSON.stringify([{ css: '#isolated', via: 'frame' }, { css: '#secret' }]),
+    '@page-monitor:' +
+      JSON.stringify([{ css: 'body', via: 'unknown' }, { css: '#price' }]),
+    '@page-monitor:broken',
+  ]) {
+    await expect(
+      rpc({ type: 'test-selector', url: `${base}/`, selector }),
+    ).rejects.toThrow();
+  }
+  expect((await rpc({ type: 'list' })).monitors).toHaveLength(0);
+});

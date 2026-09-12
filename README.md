@@ -52,9 +52,16 @@ Cookie restrictions, site defenses, and site-specific authentication can prevent
 background checks; universal site/authentication support is not promised. A stale
 open page cannot universally reveal that a session expired elsewhere.
 
-Selection is limited to the top-level document's ordinary HTML text. Embedded
-frames, shadow-root content, image/pixel changes, input values, PDF viewers,
-Chrome internal pages, and incognito are unsupported. Automatic selector fallback
+The picker supports ordinary HTML text, nested open Shadow DOM (web components),
+and same-origin embedded frames in open tabs. Existing CSS selectors still work;
+the picker saves a component/frame path when needed. Use **Test selector** to
+check either kind before saving. Select text inside a component rather than its
+outer container; text extraction does not combine separate shadow trees.
+
+Cross-origin or sandbox-isolated frames, closed shadow roots, image/pixel changes,
+input values, PDF viewers, Chrome internal/store pages, and incognito are
+unsupported. Component/frame selections generally need the tab to remain open;
+background HTML parsing does not execute component code or load nested frames. Automatic selector fallback
 is deliberately omitted to avoid silently watching the wrong region after a redesign.
 
 Comparison collapses whitespace and excludes script/style, hidden attributes,

@@ -266,7 +266,8 @@ async function testSelector(): Promise<void> {
     if (!targetSelector || targetSelector.length > 2000)
       throw new Error('Enter a CSS selector or select a region first.');
     try {
-      document.querySelector(targetSelector);
+      if (!targetSelector.startsWith('@page-monitor:'))
+        document.querySelector(targetSelector);
     } catch {
       throw new Error(
         'Invalid CSS selector. Correct its syntax and try again.',

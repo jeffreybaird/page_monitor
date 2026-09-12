@@ -24,6 +24,21 @@ export function startPicker(token: string): void {
     document.activeElement !== document.body
       ? document.activeElement
       : null;
+  const removers: Array<() => void> = [];
+  const documents = new Set<Document>();
+  const roots = new Set<Document | ShadowRoot>();
+  const frames = new Set<HTMLIFrameElement>();
+  const isHtml = (value: unknown): value is HTMLElement =>
+    !!value &&
+    typeof value === 'object' &&
+    'nodeType' in value &&
+    value.nodeType === 1 &&
+    'namespaceURI' in value &&
+    value.namespaceURI === 'http://www.w3.org/1999/xhtml';
+  const targetOf = (event: Event): HTMLElement | null => {
+    const target = event.composedPath().find(isHtml);
+    return target && target !== host && !host.contains(target) ? target : null;
+  };
   let submitting = false;
   const draw = () => {
     if (!selected?.isConnected) {
@@ -31,14 +46,34 @@ export function startPicker(token: string): void {
       return;
     }
     const r = selected.getBoundingClientRect();
-    box.style.cssText = `left:${r.left}px;top:${r.top}px;width:${r.width}px;height:${r.height}px`;
+    let left = r.left,
+      top = r.top,
+      width = r.width,
+      height = r.height;
+    let owner = selected.ownerDocument;
+    while (owner !== document) {
+      const frame = owner.defaultView?.frameElement;
+      if (!isHtml(frame)) {
+        box.style.display = 'none';
+        return;
+      }
+      const bounds = frame.getBoundingClientRect();
+      const sx = frame.offsetWidth ? bounds.width / frame.offsetWidth : 1;
+      const sy = frame.offsetHeight ? bounds.height / frame.offsetHeight : 1;
+      left = bounds.left + (left + frame.clientLeft) * sx;
+      top = bounds.top + (top + frame.clientTop) * sy;
+      width *= sx;
+      height *= sy;
+      owner = frame.ownerDocument;
+    }
+    box.style.cssText = `left:${left}px;top:${top}px;width:${width}px;height:${height}px`;
   };
   const cleanup = () => {
     clearTimeout(timeout);
-    document.removeEventListener('pointermove', move, true);
-    document.removeEventListener('click', click, true);
-    document.removeEventListener('keydown', key, true);
-    window.removeEventListener('scroll', draw, true);
+    removers.forEach((remove) => remove());
+    documents.clear();
+    roots.clear();
+    frames.clear();
     host.remove();
   };
   const send = async (payload: object, cancelled = false) => {
@@ -95,34 +130,70 @@ export function startPicker(token: string): void {
       hint.textContent = 'Choose page text, not an editable field.';
       return;
     }
-    let selector = '';
-    let node: HTMLElement | null = selected;
-    while (node && node !== document.documentElement) {
-      if (node.id && !/^phx-|\d{6}/.test(node.id)) {
-        const id = '#' + CSS.escape(node.id);
-        if (document.querySelectorAll(id).length === 1) {
-          selector = id + (selector ? ' > ' + selector : '');
+    type Step = { css: string; via?: 'shadow' | 'frame' };
+    function path(element: HTMLElement, depth = 0): Step[] {
+      if (depth >= 8) throw new Error('Selection is nested too deeply.');
+      const root = element.getRootNode();
+      if (root.nodeType !== 9 && !(root.nodeType === 11 && 'host' in root))
+        throw new Error('Region is unavailable.');
+      const scope = root as Document | ShadowRoot;
+      let css = '';
+      let node: HTMLElement | null = element;
+      while (node) {
+        const candidates: string[] = [];
+        if (node.id && !/^phx-|\d{6}/.test(node.id))
+          candidates.push('#' + CSS.escape(node.id));
+        for (const attribute of ['data-testid', 'data-test']) {
+          const value = node.getAttribute(attribute);
+          if (value) candidates.push(`[${attribute}="${CSS.escape(value)}"]`);
+        }
+        const unique = candidates.find(
+          (candidate) => scope.querySelectorAll(candidate).length === 1,
+        );
+        if (unique) {
+          css = unique + (css ? ' > ' + css : '');
           break;
         }
+        const siblings = Array.from(node.parentNode?.children ?? []).filter(
+          (e) => e.tagName === node?.tagName,
+        );
+        const part =
+          node.tagName.toLowerCase() +
+          (siblings.length > 1
+            ? `:nth-of-type(${siblings.indexOf(node) + 1})`
+            : '');
+        css = part + (css ? ' > ' + css : '');
+        node = node.parentElement;
       }
-      const tag = node.tagName.toLowerCase();
-      const siblings = node.parentElement
-        ? Array.from(node.parentElement.children).filter(
-            (e) => e.tagName === node?.tagName,
-          )
-        : [];
-      const part =
-        tag +
-        (siblings.length > 1
-          ? `:nth-of-type(${siblings.indexOf(node) + 1})`
-          : '');
-      selector = part + (selector ? ' > ' + selector : '');
-      node = node.parentElement;
+      const matches = scope.querySelectorAll(css);
+      if (matches.length !== 1 || matches[0] !== element)
+        throw new Error('Choose a smaller region.');
+      if ('host' in scope) {
+        if (!isHtml(scope.host)) throw new Error('Unsupported component.');
+        const parent = path(scope.host, depth + 1);
+        parent[parent.length - 1].via = 'shadow';
+        return [...parent, { css }];
+      }
+      if (scope !== document) {
+        const frame = scope.defaultView?.frameElement;
+        if (!isHtml(frame))
+          throw new Error('Only same-origin frames are supported.');
+        const parent = path(frame, depth + 1);
+        parent[parent.length - 1].via = 'frame';
+        return [...parent, { css }];
+      }
+      return [{ css }];
     }
-    const matches = selector ? document.querySelectorAll(selector) : [];
-    if (matches.length !== 1 || matches[0] !== selected) {
+    let selector: string;
+    try {
+      const steps = path(selected);
+      selector =
+        steps.length === 1
+          ? steps[0].css
+          : '@page-monitor:' + JSON.stringify(steps);
+    } catch (error) {
       hint.textContent =
-        'This region cannot be selected reliably. Choose a smaller region.';
+        error instanceof Error ? error.message : 'Reselect the region.';
       return;
     }
     const copy = selected.cloneNode(true) as HTMLElement;
@@ -139,8 +210,8 @@ export function startPicker(token: string): void {
     void send({ selector, sample, title: document.title });
   };
   function move(event: PointerEvent) {
-    const target = event.target;
-    if (target instanceof HTMLElement && target !== host) {
+    const target = targetOf(event);
+    if (target) {
       selected = target;
       draw();
     }
@@ -148,12 +219,7 @@ export function startPicker(token: string): void {
   function click(event: MouseEvent) {
     event.preventDefault();
     event.stopImmediatePropagation();
-    const target =
-      event.target instanceof HTMLElement
-        ? event.target
-        : event.target instanceof Element
-          ? event.target.parentElement
-          : null;
+    const target = targetOf(event);
     if (target && target !== host && !host.contains(target)) {
       selected = target;
       draw();
@@ -170,19 +236,71 @@ export function startPicker(token: string): void {
     else {
       const candidate =
         event.key === 'ArrowUp'
-          ? selected?.parentElement
-          : (selected?.firstElementChild ?? document.body);
-      if (candidate instanceof HTMLElement && candidate !== host) {
+          ? (selected?.parentElement ??
+            (selected?.getRootNode() as ShadowRoot | undefined)?.host)
+          : (selected?.shadowRoot?.firstElementChild ??
+            selected?.firstElementChild ??
+            document.body);
+      if (isHtml(candidate) && candidate !== host) {
         selected = candidate;
         draw();
       }
     }
   }
   host.addEventListener('page-monitor-cleanup', cleanup, { once: true });
-  document.addEventListener('pointermove', move, true);
-  document.addEventListener('click', click, true);
-  document.addEventListener('keydown', key, true);
-  window.addEventListener('scroll', draw, true);
+  function attach(doc: Document) {
+    if (documents.has(doc) || documents.size >= 32) return;
+    documents.add(doc);
+    doc.addEventListener('pointermove', move, true);
+    doc.addEventListener('click', click, true);
+    doc.addEventListener('keydown', key, true);
+    doc.addEventListener('scroll', draw, true);
+    removers.push(() => {
+      doc.removeEventListener('pointermove', move, true);
+      doc.removeEventListener('click', click, true);
+      doc.removeEventListener('keydown', key, true);
+      doc.removeEventListener('scroll', draw, true);
+    });
+    watch(doc);
+  }
+  function scan(element: Element) {
+    if (element === host) return;
+    if (element.shadowRoot) watch(element.shadowRoot);
+    if (element.tagName === 'IFRAME' || element.tagName === 'FRAME') {
+      const frame = element as HTMLIFrameElement;
+      if (frames.has(frame) || frames.size >= 32) return;
+      frames.add(frame);
+      const load = () => {
+        try {
+          const child = frame.contentDocument;
+          if (child?.defaultView && child.defaultView.origin === window.origin)
+            attach(child);
+        } catch {
+          /* Cross-origin or sandboxed frames are inaccessible. */
+        }
+      };
+      frame.addEventListener('load', load);
+      removers.push(() => frame.removeEventListener('load', load));
+      load();
+    }
+  }
+  function watch(root: Document | ShadowRoot) {
+    if (roots.has(root) || roots.size >= 128) return;
+    roots.add(root);
+    root.querySelectorAll('*').forEach(scan);
+    const observer = new MutationObserver((records) => {
+      for (const record of records)
+        for (const added of record.addedNodes) {
+          if (added.nodeType !== 1) continue;
+          const element = added as Element;
+          scan(element);
+          element.querySelectorAll('*').forEach(scan);
+        }
+    });
+    observer.observe(root, { childList: true, subtree: true });
+    removers.push(() => observer.disconnect());
+  }
+  attach(document);
   const timeout = setTimeout(() => {
     void send({ cancelled: true }, true);
   }, 120000);

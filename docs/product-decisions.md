@@ -15,6 +15,10 @@ and launch proposals in the original rough plan.
   screenshots, sound, paid plans, launch dates, and cloud checks are deferred.
 - Begin with generic HTTP/HTTPS support and the authenticated Elixir dashboard as
   a reference; show capability limits rather than promising all pages work.
+- Expand across HTTP/HTTPS sites with per-origin access. Open-tab selection supports
+  nested open shadow roots and same-origin frames. Existing CSS selectors remain
+  valid; component paths are bounded to eight steps. No cross-origin frame access,
+  temporary tabs, or nested-frame background requests are introduced.
 - A single worker owns durable state. The first check sets a baseline. Subsequent
   changes persist before notification. Failed checks retain the last baseline.
 - A resumed monitor restarts its duration. Editing its settings resets its end
