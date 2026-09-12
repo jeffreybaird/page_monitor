@@ -138,6 +138,14 @@ export async function checkMonitor(id: string): Promise<void> {
 }
 async function handle(request: Request): Promise<View> {
   if (request.type === 'list') return view();
+  if (request.type === 'test-selector') {
+    const url = webUrl(request.url);
+    const result = await readRegion({ url, selector: request.selector });
+    return {
+      ...(await view()),
+      preview: { url, selector: request.selector, ...result },
+    };
+  }
   if (request.type === 'pick') {
     const tab = await chrome.tabs.get(request.tabId);
     if (tab.incognito || tab.url !== webUrl(request.url))

@@ -113,6 +113,32 @@ function current(): Monitor {
   return (data.pageMonitor as { monitors: Monitor[] }).monitors[0];
 }
 describe('worker ownership and recovery', () => {
+  it('previews extraction without saving state, scheduling, or delivering alerts', async () => {
+    const writes = set.mock.calls.length;
+    const before = structuredClone(data);
+    const scheduled = new Map(alarms);
+    const reply = await rpc({
+      type: 'test-selector',
+      url: 'https://example.com/',
+      selector: '#price',
+    });
+    expect(reply).toMatchObject({
+      ok: true,
+      value: { preview: { text: '41', source: 'tab', selector: '#price' } },
+    });
+    expect(data).toEqual(before);
+    expect(alarms).toEqual(scheduled);
+    expect(set).toHaveBeenCalledTimes(writes);
+    expect(mocks.deliver).not.toHaveBeenCalled();
+    expect(
+      await rpc({
+        type: 'test-selector',
+        url: 'file:///secret',
+        selector: '#price',
+      }),
+    ).toMatchObject({ ok: false });
+  });
+
   it('rejects webpage, foreign, subframe, and malformed requests without side effects', async () => {
     const writes = set.mock.calls.length;
     for (const context of [

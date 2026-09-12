@@ -39,11 +39,21 @@ export type MonitorInput = Pick<
 export type Request =
   | { type: 'list' }
   | { type: 'pick'; tabId: number; url: string }
+  | { type: 'test-selector'; url: string; selector: string }
   | { type: 'create'; input: MonitorInput }
   | { type: 'update'; id: string; input: MonitorInput }
   | { type: 'check' | 'delete' | 'read'; id: string }
   | { type: 'toggle'; id: string; enabled: boolean };
-export type View = { monitors: Monitor[]; draft: Draft | null };
+export type View = {
+  monitors: Monitor[];
+  draft: Draft | null;
+  preview?: {
+    url: string;
+    selector: string;
+    text: string;
+    source: 'tab' | 'background';
+  };
+};
 export type Reply = { ok: true; value: View } | { ok: false; error: string };
 export function webUrl(value: string): string {
   const url = new URL(value);
@@ -101,6 +111,19 @@ export function requestValid(value: unknown): value is Request {
         r.tabId >= 0 &&
         typeof r.url === 'string' &&
         !!webUrl(r.url)
+      );
+    } catch {
+      return false;
+    }
+  }
+  if (r.type === 'test-selector') {
+    try {
+      return (
+        typeof r.url === 'string' &&
+        !!webUrl(r.url) &&
+        typeof r.selector === 'string' &&
+        r.selector.trim().length > 0 &&
+        r.selector.length <= 2000
       );
     } catch {
       return false;

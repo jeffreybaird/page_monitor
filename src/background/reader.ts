@@ -1,7 +1,7 @@
 import { extractRegion } from '../content/extract';
 import { originPattern, type Monitor } from '../shared/model';
 export async function readRegion(
-  m: Monitor,
+  m: Pick<Monitor, 'url' | 'selector'>,
 ): Promise<{ text: string; source: 'tab' | 'background' }> {
   if (!(await chrome.permissions.contains({ origins: [originPattern(m.url)] })))
     throw new Error(

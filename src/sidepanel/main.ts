@@ -114,6 +114,25 @@ units.addEventListener('change', () => {
     interval.value = interval.min;
 });
 const sample = el('p', 'Select a region to preview its text.', 'preview');
+let previewGeneration = 0;
+const selectorStatus = el(
+  'p',
+  'Test a selector to confirm its current text before saving.',
+  'hint',
+);
+selectorStatus.setAttribute('role', 'status');
+const testSelectorButton = button('Test selector', () => {
+  void testSelector();
+});
+function invalidatePreview(): void {
+  previewGeneration++;
+  selectorStatus.textContent = 'Selector not tested for these settings.';
+  selectorStatus.classList.remove('error');
+  sample.textContent =
+    'Select a region or test its selector to preview the text.';
+}
+url.addEventListener('input', invalidatePreview);
+selector.addEventListener('input', invalidatePreview);
 let editingId: string | null = null;
 let draftKey = '';
 let activeTab: chrome.tabs.Tab | undefined;
@@ -140,6 +159,8 @@ form.append(
   field('Monitor name', name),
   field('Page URL', url),
   field('CSS selector', selector),
+  testSelectorButton,
+  selectorStatus,
   sample,
   intervalRow,
   el(
@@ -197,6 +218,7 @@ function fail(error: unknown): void {
   );
 }
 function resetForm(): void {
+  invalidatePreview();
   form.reset();
   interval.value = '5';
   duration.value = '60';
@@ -218,6 +240,7 @@ function applyDraft(draft: Draft | null): void {
   }
   if (JSON.stringify(draft) === draftKey) return;
   draftKey = JSON.stringify(draft);
+  invalidatePreview();
   url.value = draft.url;
   selector.value = draft.selector;
   if (!name.value) name.value = draft.title.slice(0, 100);
@@ -244,6 +267,54 @@ async function refreshTab(): Promise<void> {
     });
   } catch {
     activeTab = undefined;
+  }
+}
+async function testSelector(): Promise<void> {
+  let generation = previewGeneration;
+  try {
+    const targetUrl = webUrl(url.value);
+    const targetSelector = selector.value.trim();
+    if (!targetSelector || targetSelector.length > 2000)
+      throw new Error('Enter a CSS selector or select a region first.');
+    try {
+      document.querySelector(targetSelector);
+    } catch {
+      throw new Error(
+        'Invalid CSS selector. Correct its syntax and try again.',
+      );
+    }
+    generation = ++previewGeneration;
+    const permission = chrome.permissions.request({
+      origins: [originPattern(targetUrl)],
+    });
+    testSelectorButton.disabled = true;
+    selectorStatus.textContent = 'Testing selector…';
+    selectorStatus.classList.remove('error');
+    sample.textContent = '';
+    if (!(await permission))
+      throw new Error(
+        'Site access was denied. Allow access to test this selector.',
+      );
+    const result = await request({
+      type: 'test-selector',
+      url: targetUrl,
+      selector: targetSelector,
+    });
+    if (generation !== previewGeneration) return;
+    if (!result.preview) throw new Error('No selector preview was returned.');
+    sample.textContent = result.preview.text;
+    selectorStatus.textContent = `Valid selector · One region found in ${result.preview.source === 'tab' ? 'the open tab' : 'background HTML'}. Nothing has been saved.`;
+  } catch (error) {
+    if (generation === previewGeneration) {
+      selectorStatus.textContent =
+        error instanceof Error
+          ? error.message
+          : 'Could not test this selector.';
+      selectorStatus.classList.add('error');
+      sample.textContent = '';
+    }
+  } finally {
+    testSelectorButton.disabled = false;
   }
 }
 async function pick(): Promise<void> {
@@ -322,6 +393,7 @@ function date(value: number | null): string {
 }
 function edit(m: Monitor): void {
   if (busy) return;
+  invalidatePreview();
   editingId = m.id;
   formTitle.textContent = 'Edit monitor';
   name.value = m.name;

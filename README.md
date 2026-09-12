@@ -22,7 +22,9 @@ page; cancel and restart any active element picker on the target page.
 2. In the side panel, select a region in the current tab. Grant access to that
    site's origin when Chrome asks. Point and click, or use the arrow keys and
    Enter. Escape cancels selection. A CSS selector can also be entered directly.
-3. Set a name, check interval (30 seconds to 24 hours), and duration (up to one
+3. Click **Test selector** to confirm it matches one nonempty region and preview
+   the text without saving or sending a notification. Editing the URL or selector
+   invalidates that preview. Then set a name, check interval (30 seconds to 24 hours), and duration (up to one
    year) or leave it running until stopped. The default interval is five minutes.
 4. Save. The first successful check establishes a baseline without an alert.
    Every later text change creates a desktop notification and increments the badge.

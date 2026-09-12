@@ -416,3 +416,71 @@ test('opens the actual side panel context and retains the selected save target',
     'Second region',
   );
 });
+
+test('tests selector text before saving without creating a monitor or notification', async () => {
+  const page = await context.newPage();
+  await page.goto(`${base}/`);
+  await panel.getByLabel('Page URL', { exact: true }).fill(`${base}/`);
+  const field = panel.getByLabel('CSS selector', { exact: true });
+  const testButton = panel.getByRole('button', {
+    name: 'Test selector',
+    exact: true,
+  });
+  await field.fill('[');
+  await testButton.click();
+  await expect(
+    panel.getByText('Invalid CSS selector. Correct its syntax and try again.', {
+      exact: true,
+    }),
+  ).toBeVisible();
+  await field.fill('#missing');
+  await testButton.click();
+  await expect(panel.getByText(/Selected region was not found/)).toBeVisible();
+  await field.fill('body *');
+  await testButton.click();
+  await expect(
+    panel.getByText('Selection is ambiguous. Reselect the region.', {
+      exact: true,
+    }),
+  ).toBeVisible();
+  await field.fill('#price');
+  await testButton.click();
+  await expect(
+    panel.getByText(
+      'Valid selector · One region found in the open tab. Nothing has been saved.',
+      { exact: true },
+    ),
+  ).toBeVisible();
+  await expect(panel.locator('.preview')).toHaveText('40');
+  expect((await rpc({ type: 'list' })).monitors).toHaveLength(0);
+  expect(await panel.evaluate(() => chrome.action.getBadgeText({}))).toBe('');
+  await field.fill('h1');
+  await expect(
+    panel.getByText('Selector not tested for these settings.', { exact: true }),
+  ).toBeVisible();
+  await expect(panel.locator('.preview')).not.toHaveText('40');
+  await page.close();
+  await field.fill('#price');
+  await testButton.click();
+  await expect(
+    panel.getByText(
+      'Valid selector · One region found in background HTML. Nothing has been saved.',
+      { exact: true },
+    ),
+  ).toBeVisible();
+  await panel.evaluate(
+    async (origin) => chrome.permissions.remove({ origins: [origin] }),
+    `${base}/*`,
+  );
+  const reply: Reply = await panel.evaluate(
+    async (url) =>
+      chrome.runtime.sendMessage({
+        type: 'test-selector',
+        url,
+        selector: '#price',
+      }),
+    `${base}/`,
+  );
+  expect(reply.ok).toBe(false);
+  expect((await rpc({ type: 'list' })).monitors).toHaveLength(0);
+});
