@@ -228,6 +228,13 @@ and do not rewrite shared history. Building an archive does not publish it; use 
 release workflow only when publication is requested or authorized. Keep store disclosures
 consistent with shipped behavior.
 
+Make atomic commits as work progresses: each commit should contain one coherent change and
+its relevant tests or documentation. Run the applicable checks before committing. Push
+completed commits directly to `main` without asking for routine confirmation; this workflow
+is explicitly authorized by the user. Check remote changes before pushing, preserve others'
+work, and never force-push or rewrite shared history. A Git push does not authorize store
+submission or any other release action.
+
 For platform-dependent changes, consult the official [Chrome extension documentation](https://developer.chrome.com/docs/extensions/)
 and [Playwright extension guide](https://playwright.dev/docs/chrome-extensions), checking support
 against the project's minimum Chrome version.
