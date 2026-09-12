@@ -106,3 +106,51 @@ do not silently quarantine it or increase retries until it passes.
 
 - [Playwright extension testing](https://playwright.dev/docs/chrome-extensions)
 - [Playwright network interception](https://playwright.dev/docs/network)
+
+## Firefox harness
+
+`npm run test:e2e:firefox` builds `dist-firefox/` and runs
+`scripts/test-firefox.mjs` against stock Firefox through geckodriver's WebDriver
+HTTP endpoint. Playwright's extension support remains Chromium-only. Install
+geckodriver separately and set `GECKODRIVER` / `FIREFOX_BINARY` to executable paths
+when discovery is unavailable. Firefox 140 is the minimum; exercise both that
+version and the installed current release when changing Firefox-specific behavior.
+Use `HEADLESS=0` to inspect the disposable browser.
+
+The harness installs the actual production directory as a temporary add-on. A
+rejecting loopback proxy blocks non-local HTTP(S) traffic, and deterministic local
+fixtures cover authentication and rendering. Profile and server cleanup runs in a
+finally block; geckodriver output is retained in
+`test-results/firefox-geckodriver.log`. Tests never install into a personal profile.
+Chrome and Firefox profiles are independent, but finish edits/builds before testing
+and avoid simultaneous runs writing the same Firefox log.
+
+For most monitoring cases, the harness grants only the loopback fixture hostname
+through Firefox's privileged test context. This exercises real permissions and
+revocation but is not evidence of first-use permission-prompt acceptance. No
+privileged test endpoint is included in extension code. Keep separate evidence for
+native toolbar/sidebar/prompt tests and extension-HTML-as-tab tests.
+
+Before distribution, manually verify first-use allow and deny prompts, visible
+notification delivery/clicks with system settings, sidebar draft restoration,
+shadow/frame picking, and the authenticated reference site on both supported
+browsers. The harness forces background termination and verifies alarm wake separately from
+extension reload. Manually check natural idle behavior, abandoned rendering-tab
+cleanup, browser restart, and preservation of a temporary tab the user activates.
+
+### Firefox port verification — 2026-09-12
+
+- `npm run verify`: 101 unit/integration tests, typecheck, lint, formatting, and
+  both production builds passed.
+- `npm run test:e2e`: all 21 Chromium journeys passed, including the actual side
+  panel and ungranted-site picker.
+- Firefox harness passed on official Firefox 140.0 and installed Firefox 155.0.1
+  with geckodriver 0.36.0: authenticated reads, inert parsing, picking, rendering,
+  revocation, persistence, forced background termination/alarm wake, and native
+  toolbar/sidebar opening.
+- Mozilla validation: zero errors, three reviewed warnings described in README.
+  Unsigned Firefox ZIP inspected for intended entry points/assets and permissions.
+- Firefox permission prompts, visible OS notification delivery, actual container
+  UI rejection, activated-rendering-tab preservation, and live reference-site
+  authentication remain manual release checks. Unit tests cover container
+  rejection and notification failures; browser success is not inferred from mocks.

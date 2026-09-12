@@ -1,5 +1,7 @@
 // All helpers stay inside this function so executeScript can serialize it.
 export function startPicker(token: string): void {
+  // Serialized by executeScript: resolve the API inside the injected function.
+  const extension = typeof browser === 'undefined' ? chrome : browser;
   const previous = document.querySelector('[data-page-monitor-overlay]');
   previous?.dispatchEvent(new Event('page-monitor-cleanup'));
   const host = document.createElement('div');
@@ -79,7 +81,7 @@ export function startPicker(token: string): void {
   const send = async (payload: object, cancelled = false) => {
     if (cancelled) {
       cleanup();
-      void chrome.runtime
+      void extension.runtime
         .sendMessage({ type: 'picked', token, ...payload })
         .catch(() => {});
       return;
@@ -88,7 +90,7 @@ export function startPicker(token: string): void {
     submitting = true;
     hint.textContent = 'Sending selection…';
     try {
-      const reply: unknown = await chrome.runtime.sendMessage({
+      const reply: unknown = await extension.runtime.sendMessage({
         type: 'picked',
         token,
         ...payload,

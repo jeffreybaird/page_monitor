@@ -1,3 +1,5 @@
+import { browserName } from '#platform';
+import { api } from '../platform/api';
 import './style.css';
 import { textDiff } from './diff';
 import { htmlPreview } from './html-preview';
@@ -69,7 +71,11 @@ const app = document.querySelector('#app');
 if (!app) throw new Error('Missing side panel root.');
 const header = el('header');
 header.append(el('h1', 'Page Monitor'));
-const local = el('p', 'Local monitoring · Chrome must be running', 'local');
+const local = el(
+  'p',
+  `Local monitoring · ${browserName} must be running`,
+  'local',
+);
 const status = el('p', '', 'status');
 status.setAttribute('role', 'status');
 status.setAttribute('aria-live', 'polite');
@@ -148,11 +154,13 @@ let busy = false;
 let editorTouched = false;
 let editorRestoring = true;
 let editorVersion = 0;
-const editorWindow = chrome.windows.getCurrent().then((window) => {
-  if (window.id === undefined)
-    throw new Error('Cannot restore the draft without a browser window.');
-  return window.id;
-});
+const editorWindow = api()
+  .windows.getCurrent()
+  .then((window) => {
+    if (window.id === undefined)
+      throw new Error('Cannot restore the draft without a browser window.');
+    return window.id;
+  });
 const editorStatus = el('p', '', 'hint');
 editorStatus.setAttribute('aria-label', 'Editor draft status');
 function editorValue(): EditorDraft {
@@ -174,7 +182,7 @@ async function storeEditor(value: EditorDraft | null): Promise<boolean> {
     await saveEditorDraft(await editorWindow, value);
     if (version === editorVersion) {
       editorStatus.textContent = value
-        ? 'Draft saved until Chrome closes.'
+        ? `Draft saved until ${browserName} closes.`
         : '';
       editorStatus.classList.remove('error');
     }
@@ -245,7 +253,7 @@ form.append(
   intervalRow,
   el(
     'p',
-    'Minimum 30 seconds. Checks may be delayed while Chrome sleeps.',
+    `Minimum 30 seconds. Checks may be delayed while ${browserName} sleeps.`,
     'hint',
   ),
   field('Monitor for', durationMode),
@@ -321,7 +329,7 @@ function message(text: string, error = false): void {
   status.classList.toggle('error', error);
 }
 async function request(value: Request): Promise<View> {
-  const reply: Reply = await chrome.runtime.sendMessage(value);
+  const reply: Reply = await api().runtime.sendMessage(value);
   if (!reply || !reply.ok)
     throw new Error(
       reply?.error || 'The extension did not respond. Reopen the side panel.',
@@ -429,7 +437,7 @@ async function testSelector(): Promise<void> {
       );
     }
     generation = ++previewGeneration;
-    const permission = chrome.permissions.request({
+    const permission = api().permissions.request({
       origins: [originPattern(targetUrl)],
     });
     testSelectorButton.disabled = true;
@@ -465,18 +473,38 @@ async function testSelector(): Promise<void> {
     submit.disabled = busy;
   }
 }
+let activePickerTab: chrome.tabs.Tab | undefined;
+let activeTabGeneration = 0;
+async function refreshPickerTab(): Promise<void> {
+  const generation = ++activeTabGeneration;
+  activePickerTab = undefined;
+  try {
+    const windowId = await editorWindow;
+    const [tab] = await api().tabs.query({ active: true, windowId });
+    if (generation === activeTabGeneration) activePickerTab = tab;
+  } catch {
+    // The picker reports an unavailable tab when clicked; do not interrupt edits.
+  }
+}
+api().tabs.onActivated.addListener(() => {
+  void refreshPickerTab();
+});
+api().tabs.onUpdated.addListener((_id, change) => {
+  if (change.url || change.status === 'loading') void refreshPickerTab();
+});
+void refreshPickerTab();
+
 async function pick(): Promise<void> {
   try {
-    const [tab] = await chrome.tabs.query({
-      active: true,
-      currentWindow: true,
-    });
+    // Resolve before the click: Firefox requires permissions.request in the
+    // original user gesture, before any awaited browser operation.
+    const tab = activePickerTab;
     if (!tab?.url || tab.id === undefined)
       throw new Error(
         'Open a website and click the Page Monitor toolbar icon first.',
       );
     const tabUrl = webUrl(tab.url);
-    const granted = await chrome.permissions.request({
+    const granted = await api().permissions.request({
       origins: [originPattern(tabUrl)],
     });
     if (!granted)
@@ -513,7 +541,7 @@ form.addEventListener('submit', (event) => {
   }
   // Invoke the permission request directly from the submit gesture.
   const targetId = editingId;
-  const permission = chrome.permissions.request({
+  const permission = api().permissions.request({
     origins: [originPattern(value.url)],
   });
   busy = true;
@@ -965,7 +993,7 @@ function renderMonitors(): void {
     list.append(empty);
   }
 }
-chrome.storage.onChanged.addListener((changes, area) => {
+api().storage.onChanged.addListener((changes, area) => {
   if (
     (area === 'local' && changes.pageMonitor) ||
     (area === 'session' && (changes.draft || changes.checkingMonitor))

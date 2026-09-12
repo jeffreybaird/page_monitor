@@ -8,7 +8,10 @@
     "strict": true,
     "noEmit": true,
     "skipLibCheck": true,
-    "esModuleInterop": true
+    "esModuleInterop": true,
+    "paths": {
+      "#platform": ["./src/platform/chrome.ts"]
+    }
   },
   "include": ["src", "tests", "*.ts"]
 }

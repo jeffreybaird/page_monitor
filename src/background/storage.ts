@@ -1,3 +1,4 @@
+import { api } from '../platform/api';
 import {
   inputValid,
   MAX_HISTORY,
@@ -71,9 +72,9 @@ export function validateState(value: unknown): State {
   return s;
 }
 export async function readState(): Promise<State> {
-  return validateState((await chrome.storage.local.get(STATE_KEY))[STATE_KEY]);
+  return validateState((await api().storage.local.get(STATE_KEY))[STATE_KEY]);
 }
 export async function writeState(state: State): Promise<void> {
   validateState(state);
-  await chrome.storage.local.set({ [STATE_KEY]: state });
+  await api().storage.local.set({ [STATE_KEY]: state });
 }

@@ -1,3 +1,4 @@
+import { permissionPattern } from '#platform';
 export const MAX_TEXT = 8000;
 export const MAX_MONITORS = 20;
 export const MAX_HISTORY = 10;
@@ -83,7 +84,7 @@ export function webUrl(value: string): string {
   return url.href;
 }
 export function originPattern(url: string): string {
-  return `${new URL(webUrl(url)).origin}/*`;
+  return permissionPattern(new URL(webUrl(url)));
 }
 export function normalize(text: string): string {
   return text.replace(/\s+/g, ' ').trim();

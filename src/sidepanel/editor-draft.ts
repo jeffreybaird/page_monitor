@@ -1,3 +1,4 @@
+import { api } from '../platform/api';
 export type EditorDraft = {
   editingId: string | null;
   name: string;
@@ -68,7 +69,7 @@ export async function readEditorDraft(
 ): Promise<EditorDraft | null> {
   const storageKey = key(windowId);
   await pending.get(windowId);
-  const values = await chrome.storage.session.get(storageKey);
+  const values = await api().storage.session.get(storageKey);
   return parse(values[storageKey]);
 }
 
@@ -85,8 +86,8 @@ export async function saveEditorDraft(
   if (draft !== null && clean === null)
     throw new Error('This editor draft contains invalid or oversized fields.');
   const write = (pending.get(windowId) ?? Promise.resolve()).then(async () => {
-    if (clean === null) await chrome.storage.session.remove(storageKey);
-    else await chrome.storage.session.set({ [storageKey]: clean });
+    if (clean === null) await api().storage.session.remove(storageKey);
+    else await api().storage.session.set({ [storageKey]: clean });
   });
   // Each caller sees its own failure; a failed write must not block later clears.
   const settled = write.catch(() => {});

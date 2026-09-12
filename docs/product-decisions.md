@@ -40,3 +40,22 @@ text, with a twenty-second timeout. Users can explicitly request rendering for
 placeholder-based applications. Failed renders preserve the last snapshot. Session
 ownership and a cleanup alarm recover abandoned tabs after worker restarts; browser
 session restoration does not grant ownership over restored user tabs.
+
+## Desktop Firefox support
+
+- Keep one codebase with Chrome 120+ and desktop Firefox 140+ build targets.
+- Reuse the existing UI in Firefox's native sidebar. Use a non-persistent module
+  background document and inert HTML parsing in that context; Chrome retains its
+  worker/offscreen implementation.
+- Preserve local monitoring, schema version 1, permissions requested at the time
+  of use, and all existing checking/notification rules. No browser synchronization
+  or automatic migration between browser profiles.
+- Firefox host permissions cover a scheme/hostname across ports; actual page
+  selection and extraction still verify the saved URL and relevant exact origins.
+- Firefox container sessions are unsupported in this first port. Reject container
+  selection and exclude them from reads and notification targets; if only a
+  container matches a URL, do not silently check the default account instead.
+- Firefox does not expose notification permission status or local-storage access
+  restrictions equivalent to Chrome's APIs. Handle notification creation failures
+  and document OS suppression and storage visibility without claiming parity there.
+- Firefox Android, Safari, signing and public distribution are outside this change.

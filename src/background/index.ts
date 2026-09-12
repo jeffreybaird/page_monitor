@@ -1,3 +1,5 @@
+import { initializePlatform, registerToolbar, supportedTab } from '#platform';
+import { api } from '../platform/api';
 import { draftValue, pendingValue } from '../shared/session';
 import { startPicker } from '../content/picker';
 import {
@@ -45,20 +47,20 @@ async function view(): Promise<View> {
   return {
     monitors: (await readState()).monitors,
     checkingId,
-    draft: draftValue((await chrome.storage.session.get('draft')).draft),
+    draft: draftValue((await api().storage.session.get('draft')).draft),
   };
 }
 async function syncAlarm(m: Monitor): Promise<void> {
   const name = PREFIX + m.id;
   if (!m.enabled) {
-    await chrome.alarms.clear(name);
+    await api().alarms.clear(name);
     return;
   }
   const next = Math.min(
     Date.now() + m.intervalSeconds * 1000,
     m.endsAt ?? Infinity,
   );
-  await chrome.alarms.create(name, {
+  await api().alarms.create(name, {
     when: next,
     periodInMinutes: m.intervalSeconds / 60,
   });
@@ -94,9 +96,9 @@ async function scheduleNotifications(): Promise<void> {
     m.history.some((h) => !h.delivered),
   );
   if (pending) {
-    if (!(await chrome.alarms.get(NOTIFY_ALARM)))
-      await chrome.alarms.create(NOTIFY_ALARM, { periodInMinutes: 1 });
-  } else await chrome.alarms.clear(NOTIFY_ALARM);
+    if (!(await api().alarms.get(NOTIFY_ALARM)))
+      await api().alarms.create(NOTIFY_ALARM, { periodInMinutes: 1 });
+  } else await api().alarms.clear(NOTIFY_ALARM);
 }
 export async function checkMonitor(id: string): Promise<void> {
   await notifyPending(id);
@@ -116,7 +118,7 @@ export async function checkMonitor(id: string): Promise<void> {
   if (!m) return;
   try {
     checkingId = id;
-    await chrome.storage.session.set({ checkingMonitor: id });
+    await api().storage.session.set({ checkingMonitor: id });
     if (m.history.length >= 10 && m.history.at(-1)?.delivered === false)
       throw new Error(
         'Notification backlog is full. Checks will resume after notifications can be delivered.',
@@ -165,7 +167,7 @@ export async function checkMonitor(id: string): Promise<void> {
     return;
   } finally {
     checkingId = null;
-    await chrome.storage.session.remove('checkingMonitor');
+    await api().storage.session.remove('checkingMonitor');
   }
   await notifyPending(id);
 }
@@ -174,13 +176,13 @@ async function handle(request: Request): Promise<View> {
   if (request.type === 'clear-draft') {
     await draftSerial(async () => {
       const current = draftValue(
-        (await chrome.storage.session.get('draft')).draft,
+        (await api().storage.session.get('draft')).draft,
       );
       if (
         request.expected === undefined ||
         JSON.stringify(current) === request.expected
       )
-        await chrome.storage.session.remove('draft');
+        await api().storage.session.remove('draft');
     });
     return view();
   }
@@ -200,17 +202,21 @@ async function handle(request: Request): Promise<View> {
     };
   }
   if (request.type === 'pick') {
-    const tab = await chrome.tabs.get(request.tabId);
-    if (tab.incognito || tab.url !== webUrl(request.url))
+    const tab = await api().tabs.get(request.tabId);
+    if (!supportedTab(tab))
+      throw new Error(
+        'Use a normal, non-private, non-container tab to select a region.',
+      );
+    if (tab.url !== webUrl(request.url))
       throw new Error('The selected tab changed. Choose it again.');
     if (
-      !(await chrome.permissions.contains({
+      !(await api().permissions.contains({
         origins: [originPattern(request.url)],
       }))
     )
       throw new Error('Grant access to this site before selecting a region.');
     const token = crypto.randomUUID();
-    await chrome.storage.session.set({
+    await api().storage.session.set({
       pendingPick: {
         token,
         tabId: request.tabId,
@@ -219,7 +225,7 @@ async function handle(request: Request): Promise<View> {
       },
       draft: null,
     });
-    await chrome.scripting.executeScript({
+    await api().scripting.executeScript({
       target: { tabId: request.tabId },
       func: startPicker,
       args: [token],
@@ -237,7 +243,7 @@ async function handle(request: Request): Promise<View> {
       name: request.input.name.trim(),
     };
     if (
-      !(await chrome.permissions.contains({
+      !(await api().permissions.contains({
         origins: [originPattern(input.url)],
       }))
     )
@@ -273,7 +279,7 @@ async function handle(request: Request): Promise<View> {
       };
       state.monitors.push(m);
       await writeState(state);
-      await draftSerial(() => chrome.storage.session.remove('draft'));
+      await draftSerial(() => api().storage.session.remove('draft'));
       await syncAlarm(m);
       // Worker owns the check, independent of the panel lifetime.
       void serial(() => checkMonitor(m.id)).catch(report);
@@ -305,7 +311,7 @@ async function handle(request: Request): Promise<View> {
       await writeState(state);
       await syncAlarm(m);
       await updateBadge(state.monitors);
-      await draftSerial(() => chrome.storage.session.remove('draft'));
+      await draftSerial(() => api().storage.session.remove('draft'));
     }
     return view();
   }
@@ -317,7 +323,7 @@ async function handle(request: Request): Promise<View> {
   } else if (request.type === 'delete') {
     state.monitors = state.monitors.filter((item) => item.id !== m.id);
     await writeState(state);
-    await chrome.alarms.clear(PREFIX + m.id);
+    await api().alarms.clear(PREFIX + m.id);
     await scheduleNotifications();
     await updateBadge(state.monitors);
   } else if (request.type === 'read') {
@@ -340,12 +346,12 @@ async function handle(request: Request): Promise<View> {
 }
 export function trustedPanel(sender: chrome.runtime.MessageSender): boolean {
   return (
-    sender.id === chrome.runtime.id &&
-    sender.url === chrome.runtime.getURL('sidepanel.html') &&
+    sender.id === api().runtime.id &&
+    sender.url === api().runtime.getURL('sidepanel.html') &&
     (sender.frameId === undefined || sender.frameId === 0)
   );
 }
-chrome.runtime.onMessage.addListener((message: unknown, sender, respond) => {
+api().runtime.onMessage.addListener((message: unknown, sender, respond) => {
   if (
     message &&
     typeof message === 'object' &&
@@ -361,20 +367,21 @@ chrome.runtime.onMessage.addListener((message: unknown, sender, respond) => {
   ) {
     void serial(async () => {
       const pending = pendingValue(
-        (await chrome.storage.session.get('pendingPick')).pendingPick,
+        (await api().storage.session.get('pendingPick')).pendingPick,
       );
       const value = message as Record<string, unknown>;
       if (
         !pending ||
-        sender.id !== chrome.runtime.id ||
+        sender.id !== api().runtime.id ||
         sender.tab?.id !== pending.tabId ||
+        !supportedTab(sender.tab) ||
         sender.frameId !== 0 ||
         sender.url !== pending.url ||
         value.token !== pending.token ||
         Date.now() > pending.expiresAt
       )
         throw new Error('Selection expired or came from a different page.');
-      await chrome.storage.session.remove('pendingPick');
+      await api().storage.session.remove('pendingPick');
       if (value.cancelled !== true) {
         if (
           typeof value.selector !== 'string' ||
@@ -392,7 +399,7 @@ chrome.runtime.onMessage.addListener((message: unknown, sender, respond) => {
           sample: value.sample,
           title: value.title.slice(0, 100),
         };
-        await draftSerial(() => chrome.storage.session.set({ draft }));
+        await draftSerial(() => api().storage.session.set({ draft }));
       }
       return { ok: true };
     }).then(respond, (error) =>
@@ -430,15 +437,9 @@ chrome.runtime.onMessage.addListener((message: unknown, sender, respond) => {
   return true;
 });
 async function initialize(): Promise<void> {
-  await chrome.storage.local.setAccessLevel({
-    accessLevel: 'TRUSTED_CONTEXTS',
-  });
-  await chrome.storage.session.setAccessLevel({
-    accessLevel: 'TRUSTED_CONTEXTS',
-  });
-  await chrome.sidePanel.setPanelBehavior({ openPanelOnActionClick: true });
+  await initializePlatform();
   await cleanupRenderingTabs();
-  await chrome.storage.session.remove('checkingMonitor');
+  await api().storage.session.remove('checkingMonitor');
   const state = await readState();
   let changed = false;
   for (const m of state.monitors) {
@@ -448,13 +449,13 @@ async function initialize(): Promise<void> {
     }
   }
   if (changed) await writeState(state);
-  const alarms = await chrome.alarms.getAll();
+  const alarms = await api().alarms.getAll();
   for (const alarm of alarms)
     if (
       alarm.name.startsWith(PREFIX) &&
       !state.monitors.some((m) => m.enabled && PREFIX + m.id === alarm.name)
     )
-      await chrome.alarms.clear(alarm.name);
+      await api().alarms.clear(alarm.name);
   for (const m of state.monitors)
     if (m.enabled && !alarms.some((a) => a.name === PREFIX + m.id))
       await syncAlarm(m);
@@ -465,10 +466,10 @@ async function initialize(): Promise<void> {
 function report(error: unknown) {
   console.error('Page Monitor operation failed:', errorText(error));
 }
-chrome.tabs.onActivated.addListener(({ tabId }) => {
+api().tabs.onActivated.addListener(({ tabId }) => {
   void releaseRenderingTab(tabId).catch(report);
 });
-chrome.alarms.onAlarm.addListener((alarm) => {
+api().alarms.onAlarm.addListener((alarm) => {
   if (alarm.name === RENDER_CLEANUP_ALARM) {
     void cleanupRenderingTabs().catch(report);
     return;
@@ -482,18 +483,18 @@ chrome.alarms.onAlarm.addListener((alarm) => {
       report,
     );
 });
-chrome.runtime.onInstalled.addListener(() => {
+api().runtime.onInstalled.addListener(() => {
   void serial(initialize).catch(report);
 });
-chrome.runtime.onStartup.addListener(() => {
+api().runtime.onStartup.addListener(() => {
   void serial(initialize).catch(report);
 });
-chrome.permissions.onRemoved.addListener(() => {
+api().permissions.onRemoved.addListener(() => {
   void serial(async () => {
     const state = await readState();
     for (const m of state.monitors)
       if (
-        !(await chrome.permissions.contains({
+        !(await api().permissions.contains({
           origins: [originPattern(m.url)],
         }))
       )
@@ -502,19 +503,20 @@ chrome.permissions.onRemoved.addListener(() => {
     await writeState(state);
   }).catch(report);
 });
-chrome.notifications.onClicked.addListener((notificationId) => {
+api().notifications.onClicked.addListener((notificationId) => {
   void serial(async () => {
     const id = notificationId.split(':')[1];
     const m = (await readState()).monitors.find((m) => m.id === id);
     if (m) {
-      const tabs = await chrome.tabs.query({ url: originPattern(m.url) });
-      const tab = tabs.find((t) => t.url === m.url);
+      const tabs = await api().tabs.query({ url: originPattern(m.url) });
+      const tab = tabs.find((t) => t.url === m.url && supportedTab(t));
       if (tab?.id !== undefined) {
-        await chrome.tabs.update(tab.id, { active: true });
-        await chrome.windows.update(tab.windowId, { focused: true });
-      } else await chrome.tabs.create({ url: m.url });
+        await api().tabs.update(tab.id, { active: true });
+        await api().windows.update(tab.windowId, { focused: true });
+      } else await api().tabs.create({ url: m.url });
     }
   }).catch(report);
 });
+registerToolbar(report);
 const ready = serial(initialize);
 void ready.catch(report);

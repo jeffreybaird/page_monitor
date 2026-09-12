@@ -1,3 +1,5 @@
+import { supportedTab } from '#platform';
+import { api } from '../platform/api';
 import { extractRegion } from '../content/extract';
 import { originPattern, webUrl } from '../shared/model';
 
@@ -11,7 +13,7 @@ const OWNERSHIP_LOST =
   'The temporary tab was opened or closed by the user. Check again to use the open tab.';
 
 async function scheduleCleanup() {
-  await chrome.alarms.create(RENDER_CLEANUP_ALARM, {
+  await api().alarms.create(RENDER_CLEANUP_ALARM, {
     when: Date.now() + 30_000,
   });
 }
@@ -21,19 +23,19 @@ export async function releaseRenderingTab(tabId: number): Promise<void> {
     if (acquisition.claimed.size < 256) acquisition.claimed.add(tabId);
     else acquisition.overflow = true;
   }
-  await chrome.storage.session.remove(`${PREFIX}${tabId}`);
+  await api().storage.session.remove(`${PREFIX}${tabId}`);
 }
 
 async function owned(tabId: number): Promise<boolean> {
   const key = `${PREFIX}${tabId}`;
-  return (await chrome.storage.session.get(key))[key] === true;
+  return (await api().storage.session.get(key))[key] === true;
 }
 
 async function cleanupTab(tabId: number): Promise<void> {
   if (!(await owned(tabId))) return;
   let tab: chrome.tabs.Tab;
   try {
-    tab = await chrome.tabs.get(tabId);
+    tab = await api().tabs.get(tabId);
   } catch (error) {
     if (
       error instanceof Error &&
@@ -53,7 +55,7 @@ async function cleanupTab(tabId: number): Promise<void> {
   // Activation releases ownership independently of the check queue.
   if (!(await owned(tabId))) return;
   try {
-    await chrome.tabs.remove(tabId);
+    await api().tabs.remove(tabId);
     await releaseRenderingTab(tabId);
   } catch {
     // For example, Chrome can reject edits while a tab is being dragged.
@@ -63,7 +65,7 @@ async function cleanupTab(tabId: number): Promise<void> {
 }
 
 export async function cleanupRenderingTabs(): Promise<void> {
-  const values = await chrome.storage.session.get(null);
+  const values = await api().storage.session.get(null);
   for (const [key, value] of Object.entries(values)) {
     if (!key.startsWith(PREFIX) || value !== true) continue;
     const id = Number(key.slice(PREFIX.length));
@@ -72,7 +74,7 @@ export async function cleanupRenderingTabs(): Promise<void> {
 }
 
 async function permission(url: string) {
-  if (!(await chrome.permissions.contains({ origins: [originPattern(url)] })))
+  if (!(await api().permissions.contains({ origins: [originPattern(url)] })))
     throw new Error(
       'Site access was removed. Grant access from the monitor settings.',
     );
@@ -97,21 +99,25 @@ async function acquireTab(): Promise<number> {
   const claimed = (id: number) =>
     acquisition.overflow || acquisition.claimed.has(id);
   try {
-    const tab = await chrome.tabs.create({ url: 'about:blank', active: false });
+    const tab = await api().tabs.create({ url: 'about:blank', active: false });
     if (tab.id === undefined)
       throw new Error('Could not create a temporary tab.');
     const id = tab.id;
     if (tab.active || claimed(id)) throw new Error(OWNERSHIP_LOST);
     try {
-      await chrome.storage.session.set({ [`${PREFIX}${id}`]: true });
+      if (!supportedTab(tab))
+        throw new Error(
+          'Temporary rendering requires a normal, non-container tab.',
+        );
+      await api().storage.session.set({ [`${PREFIX}${id}`]: true });
     } catch (error) {
       // Even if it is inactive again, an activated blank tab belongs to the user.
-      const current = await chrome.tabs.get(id);
-      if (!current.active && !claimed(id)) await chrome.tabs.remove(id);
+      const current = await api().tabs.get(id);
+      if (!current.active && !claimed(id)) await api().tabs.remove(id);
       throw error;
     }
     if (claimed(id)) {
-      await chrome.storage.session.remove(`${PREFIX}${id}`);
+      await api().storage.session.remove(`${PREFIX}${id}`);
       throw new Error(OWNERSHIP_LOST);
     }
     return id;
@@ -138,7 +144,7 @@ export async function renderRegion(
         throw new Error(
           'The temporary tab did not finish opening. Try the check again.',
         );
-      const current = await chrome.tabs.get(id);
+      const current = await api().tabs.get(id);
       if (!(await owned(id)) || current.active) throw new Error(OWNERSHIP_LOST);
       await permission(url);
       if (current.url && current.url !== 'about:blank')
@@ -148,12 +154,12 @@ export async function renderRegion(
       if (current.url === 'about:blank' && current.status === 'complete') break;
       await new Promise((resolve) => setTimeout(resolve, 100));
     }
-    await chrome.tabs.update(id, { url, muted: true, autoDiscardable: false });
+    await api().tabs.update(id, { url, muted: true, autoDiscardable: false });
     let previous: string | undefined;
     let stableSince = 0;
     while (Date.now() < deadline) {
       if (!(await owned(id))) throw new Error(OWNERSHIP_LOST);
-      const current = await chrome.tabs.get(id);
+      const current = await api().tabs.get(id);
       if (current.active) {
         await releaseRenderingTab(id);
         throw new Error(OWNERSHIP_LOST);
@@ -171,7 +177,7 @@ export async function renderRegion(
         let value: unknown;
         try {
           const results = await bounded(
-            chrome.scripting.executeScript({
+            api().scripting.executeScript({
               target: { tabId: id },
               injectImmediately: true,
               func: extractRegion,
@@ -213,7 +219,7 @@ export async function renderRegion(
             previous = value.text;
             stableSince = Date.now();
           } else if (Date.now() - stableSince >= 1000) {
-            const latest = await chrome.tabs.get(id);
+            const latest = await api().tabs.get(id);
             if (latest.active || !(await owned(id))) {
               await releaseRenderingTab(id);
               throw new Error(OWNERSHIP_LOST);

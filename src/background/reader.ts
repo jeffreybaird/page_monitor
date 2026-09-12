@@ -1,3 +1,5 @@
+import { parseHTML, browserName, supportedTab } from '#platform';
+import { api } from '../platform/api';
 import { renderRegion } from './renderer';
 import { extractRegion } from '../content/extract';
 import { originPattern, type Monitor } from '../shared/model';
@@ -12,26 +14,30 @@ export async function readRegion(
   html?: string;
   source: 'tab' | 'background' | 'rendered';
 }> {
-  if (!(await chrome.permissions.contains({ origins: [originPattern(m.url)] })))
+  if (!(await api().permissions.contains({ origins: [originPattern(m.url)] })))
     throw new Error(
       'Site access was removed. Grant access from the monitor settings.',
     );
-  const tabs = await chrome.tabs.query({ url: originPattern(m.url) });
+  const tabs = await api().tabs.query({ url: originPattern(m.url) });
   const matching = tabs
-    .filter((t) => t.url === m.url && !t.incognito)
+    .filter((t) => t.url === m.url && supportedTab(t))
     .sort(
       (a, b) =>
         Number(!!a.discarded) - Number(!!b.discarded) ||
         Number(b.active) - Number(a.active),
     );
+  if (!matching.length && tabs.some((t) => t.url === m.url && !t.incognito))
+    throw new Error(
+      'Firefox container tabs are unsupported. Open this page in a normal, non-container tab and sign in there.',
+    );
   const existing = matching[0];
   if (existing) {
     if (existing.discarded)
       throw new Error(
-        'Chrome unloaded this tab to save memory. Activate it to resume tab checks, or close it to allow background checks. Page Monitor will not reload it.',
+        `${browserName} unloaded this tab to save memory. Activate it to resume tab checks, or close it to allow background checks. Page Monitor will not reload it.`,
       );
     if (existing.id === undefined) throw new Error('The tab is unavailable.');
-    const results = await chrome.scripting.executeScript({
+    const results = await api().scripting.executeScript({
       target: { tabId: existing.id },
       // A page can have readable content while slow assets keep it loading.
       injectImmediately: true,
@@ -98,23 +104,10 @@ async function readBackground(
   } finally {
     await reader.cancel();
   }
-  if (!(await chrome.offscreen.hasDocument()))
-    await chrome.offscreen.createDocument({
-      url: 'offscreen.html',
-      reasons: [chrome.offscreen.Reason.DOM_PARSER],
-      justification:
-        'Extract the selected text from HTML fetched using the browser session.',
-    });
-  try {
-    const value: unknown = await chrome.runtime.sendMessage({
-      type: 'parse',
-      html,
-      selector: m.selector,
-    });
-    return { ...checkedContent(value), source: 'background' };
-  } finally {
-    await chrome.offscreen.closeDocument();
-  }
+  return {
+    ...checkedContent(await parseHTML(html, m.selector)),
+    source: 'background',
+  };
 }
 class RenderingNeeded extends Error {}
 function checkedContent(value: unknown): { text: string; html?: string } {

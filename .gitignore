@@ -9,3 +9,6 @@ test-results/
 .env
 .env.*
 !.env.example
+
+dist-firefox/
+artifacts/
