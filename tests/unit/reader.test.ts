@@ -3,7 +3,7 @@ import { readRegion } from '../../src/background/reader';
 import { extractRegion } from '../../src/content/extract';
 
 vi.mock('../../src/background/renderer', () => ({
-  renderRegion: vi.fn().mockResolvedValue('Rendered'),
+  renderRegion: vi.fn().mockResolvedValue({ text: 'Rendered' }),
 }));
 const monitor = { url: 'https://example.com/price', selector: '#price' };
 const contains = vi.fn();
@@ -19,7 +19,7 @@ const create = vi.fn();
 beforeEach(async () => {
   vi.resetAllMocks();
   const { renderRegion } = await import('../../src/background/renderer');
-  vi.mocked(renderRegion).mockResolvedValue('Rendered');
+  vi.mocked(renderRegion).mockResolvedValue({ text: 'Rendered' });
   contains.mockResolvedValue(true);
   query.mockResolvedValue([]);
   executeScript.mockResolvedValue([{ result: { text: '$42' } }]);

@@ -123,7 +123,7 @@ async function acquireTab(): Promise<number> {
 export async function renderRegion(
   url: string,
   selector: string,
-): Promise<string> {
+): Promise<{ text: string; html?: string }> {
   url = webUrl(url);
   await permission(url);
   const id = await acquireTab();
@@ -225,7 +225,15 @@ export async function renderRegion(
               throw new Error(
                 'The tab navigated away before the check completed. Open the monitored URL and check your session.',
               );
-            if (latest.status === 'complete') return value.text;
+            if (latest.status === 'complete')
+              return {
+                text: value.text,
+                ...('html' in value &&
+                typeof value.html === 'string' &&
+                value.html.length <= 64000
+                  ? { html: value.html }
+                  : {}),
+              };
             previous = undefined;
           }
         } else {

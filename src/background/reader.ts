@@ -7,7 +7,11 @@ export async function readRegion(
     'url' | 'selector' | 'renderJavaScript' | 'renderingRequired'
   >,
   beforeRendering: () => Promise<void>,
-): Promise<{ text: string; source: 'tab' | 'background' | 'rendered' }> {
+): Promise<{
+  text: string;
+  html?: string;
+  source: 'tab' | 'background' | 'rendered';
+}> {
   if (!(await chrome.permissions.contains({ origins: [originPattern(m.url)] })))
     throw new Error(
       'Site access was removed. Grant access from the monitor settings.',
@@ -35,12 +39,12 @@ export async function readRegion(
       args: [m.selector, m.url],
     });
     const value: unknown = results[0]?.result;
-    return { text: checkedText(value), source: 'tab' };
+    return { ...checkedContent(value), source: 'tab' };
   }
   const render = async () => {
     await beforeRendering();
     return {
-      text: await renderRegion(m.url, m.selector),
+      ...(await renderRegion(m.url, m.selector)),
       source: 'rendered' as const,
     };
   };
@@ -54,7 +58,7 @@ export async function readRegion(
 }
 async function readBackground(
   m: Pick<Monitor, 'url' | 'selector'>,
-): Promise<{ text: string; source: 'background' }> {
+): Promise<{ text: string; html?: string; source: 'background' }> {
   const response = await fetch(m.url, {
     credentials: 'include',
     cache: 'no-store',
@@ -107,13 +111,13 @@ async function readBackground(
       html,
       selector: m.selector,
     });
-    return { text: checkedText(value), source: 'background' };
+    return { ...checkedContent(value), source: 'background' };
   } finally {
     await chrome.offscreen.closeDocument();
   }
 }
 class RenderingNeeded extends Error {}
-function checkedText(value: unknown): string {
+function checkedContent(value: unknown): { text: string; html?: string } {
   if (!value || typeof value !== 'object')
     throw new Error('No page content was returned.');
   if ('error' in value && typeof value.error === 'string') {
@@ -127,5 +131,11 @@ function checkedText(value: unknown): string {
     value.text.length > 8000
   )
     throw new Error('Invalid page content.');
-  return value.text;
+  const html =
+    'html' in value &&
+    typeof value.html === 'string' &&
+    value.html.length <= 64000
+      ? value.html
+      : undefined;
+  return { text: value.text, ...(html === undefined ? {} : { html }) };
 }

@@ -341,3 +341,25 @@ it('does not let an older picker consumption clear a newer selection', async () 
   ).toMatchObject({ ok: true });
   expect(remove).toHaveBeenCalledWith('draft');
 });
+
+it('refreshes HTML without a text alert and preserves both snapshots on failure', async () => {
+  mocks.readRegion.mockResolvedValue({
+    text: '40',
+    html: '<strong>40</strong>',
+    source: 'tab',
+  });
+  const first = await rpc({ type: 'check', id: 'monitor1' });
+  expect(first.ok && first.value.monitors[0]).toMatchObject({
+    snapshot: '40',
+    snapshotHtml: '<strong>40</strong>',
+    unread: 0,
+    history: [],
+  });
+  mocks.readRegion.mockRejectedValue(new Error('Offline'));
+  const failed = await rpc({ type: 'check', id: 'monitor1' });
+  expect(failed.ok && failed.value.monitors[0]).toMatchObject({
+    snapshot: '40',
+    snapshotHtml: '<strong>40</strong>',
+    error: 'Offline',
+  });
+});

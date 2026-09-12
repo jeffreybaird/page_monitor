@@ -171,3 +171,10 @@ explicit product/privacy decision and per-channel delivery bookkeeping before sh
   cannot fully establish. Verify paused/duration expiry and browser restart recovery.
 
 No store submission or publication is performed by the build.
+
+“Current text” displays a formatted HTML snapshot of the selected region from the
+latest successful check. Headings, emphasis, lists, and tables are retained; scripts,
+forms, external resources, and site CSS are excluded. Images use their alternative
+text. Change notifications still compare text. Existing monitors gain HTML after
+the next successful check; oversized markup falls back to text. Each monitor stores
+at most 64,000 HTML characters locally, alongside its text snapshot.

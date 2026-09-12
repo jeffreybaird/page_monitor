@@ -38,6 +38,11 @@ export function validateState(value: unknown): State {
         m.snapshot === null ||
         (typeof m.snapshot === 'string' && m.snapshot.length <= MAX_TEXT)
       ) ||
+      !(
+        m.snapshotHtml === undefined ||
+        m.snapshotHtml === null ||
+        (typeof m.snapshotHtml === 'string' && m.snapshotHtml.length <= 64000)
+      ) ||
       !(m.error === null || typeof m.error === 'string') ||
       ![null, 'tab', 'background', 'rendered'].includes(m.source) ||
       ![undefined, true, false].includes(m.renderingRequired) ||

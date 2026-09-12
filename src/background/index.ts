@@ -148,6 +148,7 @@ export async function checkMonitor(id: string): Promise<void> {
       crypto.randomUUID(),
     );
     updated.source = result.source;
+    updated.snapshotHtml = result.html ?? null;
     state.monitors = state.monitors.map((item) =>
       item.id === id ? updated : item,
     );
@@ -288,6 +289,7 @@ async function handle(request: Request): Promise<View> {
         m.renderingNotified = false;
         m.source = null;
         m.snapshot = null;
+        m.snapshotHtml = null;
         m.history = [];
         m.unread = 0;
         m.lastChangeAt = null;

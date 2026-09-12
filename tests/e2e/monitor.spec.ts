@@ -9,7 +9,7 @@ import { createServer, type Server } from 'node:http';
 import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
-import type { Reply, Request, View } from '../../src/shared/model';
+import type { Reply, Request, View, State } from '../../src/shared/model';
 let server: Server;
 let context: BrowserContext;
 let panel: Page;
@@ -1079,7 +1079,7 @@ test('highlights text changes, reveals full snapshots, and preserves reading pos
   });
   await card.getByText('Current text', { exact: true }).click();
   await expect(
-    card.getByLabel('Current text', { exact: true }).locator('pre'),
+    card.getByLabel('Current text', { exact: true }).getByLabel('HTML preview'),
   ).toHaveText('41');
   await card.getByText('Change history (1)', { exact: true }).click();
   await expect(card.locator('ins')).toHaveText('41');
@@ -1101,7 +1101,7 @@ test('highlights text changes, reveals full snapshots, and preserves reading pos
       .first(),
   ).toBeVisible();
   await expect(
-    card.getByLabel('Current text', { exact: true }).locator('pre'),
+    card.getByLabel('Current text', { exact: true }).getByLabel('HTML preview'),
   ).toBeVisible();
   await card
     .getByRole('button', { name: 'Mark changes read', exact: true })
@@ -1224,4 +1224,57 @@ test('a delayed draft restoration cannot reopen a completed form or replace its 
   await expect(
     panel.getByRole('article', { name: 'New saved monitor', exact: true }),
   ).toBeVisible();
+});
+
+test('renders current HTML, updates formatting without alerts, and sanitizes stored markup without network requests', async () => {
+  price = '<strong>40</strong>';
+  const id = await create();
+  await waitForBaseline();
+  const card = panel.getByRole('article', {
+    name: 'Fixture price',
+    exact: true,
+  });
+  await card.getByText('Current text', { exact: true }).click();
+  const preview = card.getByLabel('HTML preview');
+  await expect(preview.locator('strong')).toHaveText('40');
+  await preview.focus();
+  price = '<em>40</em>';
+  const checked = await rpc({ type: 'check', id });
+  expect(checked.monitors[0]).toMatchObject({
+    snapshot: '40',
+    unread: 0,
+    history: [],
+  });
+  await expect(preview.locator('em')).toHaveText('40');
+  await expect(preview).toBeFocused();
+  await panel.reload();
+  await card.getByText('Current text', { exact: true }).click();
+  await expect(preview.locator('em')).toHaveText('40');
+  const unexpected: string[] = [];
+  context.on('request', (request) => {
+    if (request.url().includes('/preview-resource'))
+      unexpected.push(request.url());
+  });
+  await panel.evaluate(async (base) => {
+    const { pageMonitor } = await chrome.storage.local.get<{
+      pageMonitor: State;
+    }>('pageMonitor');
+    pageMonitor.monitors[0].snapshotHtml = `<h2>Stock</h2><strong>Ready</strong><table><tr><td>40</td></tr></table><img src="${base}/preview-resource"><iframe src="${base}/preview-resource"></iframe><script>document.body.textContent='compromised'</script><a href="javascript:alert(1)">link</a>`;
+    await chrome.storage.local.set({ pageMonitor });
+  }, base);
+  await expect(preview.getByRole('heading', { name: 'Stock' })).toBeVisible();
+  await expect(preview.getByRole('cell', { name: '40' })).toBeVisible();
+  await expect(preview.locator('img,iframe,script,a')).toHaveCount(0);
+  // Flush pending rendering/resource tasks before checking the request log.
+  await panel.evaluate(
+    () =>
+      new Promise((resolve) =>
+        requestAnimationFrame(() => requestAnimationFrame(resolve)),
+      ),
+  );
+  expect(unexpected).toEqual([]);
+  await panel.screenshot({
+    path: 'test-results/html-preview.png',
+    fullPage: true,
+  });
 });

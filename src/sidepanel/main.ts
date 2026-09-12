@@ -1,5 +1,6 @@
 import './style.css';
 import { textDiff } from './diff';
+import { htmlPreview } from './html-preview';
 import {
   readEditorDraft,
   saveEditorDraft,
@@ -922,7 +923,9 @@ function renderMonitors(): void {
     card.append(controls, confirm);
     if (m.snapshot !== null) {
       const currentText = disclosure('Current text', 'snapshot', 'snapshot');
-      currentText.append(snapshot(m.snapshot, 'snapshot'));
+      const preview = htmlPreview(m.snapshotHtml, m.snapshot);
+      preview.dataset.scrollKey = 'snapshot';
+      currentText.append(preview);
       card.append(currentText);
     }
     card.append(history);

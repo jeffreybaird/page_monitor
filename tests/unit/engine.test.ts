@@ -58,7 +58,7 @@ describe('untrusted extraction', () => {
   it('removes executable, hidden, and form content', () => {
     document.body.innerHTML =
       '<section id="price">$40<script>secret()</script><input value="private"><span hidden>private</span></section>';
-    expect(extractRegion('#price')).toEqual({ text: '$40' });
+    expect(extractRegion('#price')).toMatchObject({ text: '$40' });
   });
   it('refuses login, missing, ambiguous, and editable regions', () => {
     document.body.innerHTML =
@@ -75,7 +75,9 @@ describe('untrusted extraction', () => {
       '<section id="price">$42<script>bad()</script></section>',
       'text/html',
     );
-    expect(extractRegion('#price', undefined, doc)).toEqual({ text: '$42' });
+    expect(extractRegion('#price', undefined, doc)).toMatchObject({
+      text: '$42',
+    });
   });
 });
 describe('boundaries', () => {
@@ -189,7 +191,7 @@ describe('component selector paths', () => {
     card.attachShadow({ mode: 'open' }).innerHTML =
       '<p id="value">42<input value="private"><span hidden>hidden</span></p>';
     const selector = path([{ css: '#card', via: 'shadow' }, { css: '#value' }]);
-    expect(extractRegion(selector)).toEqual({ text: '42' });
+    expect(extractRegion(selector)).toMatchObject({ text: '42' });
     const inert = new DOMParser().parseFromString(
       '<price-card id="card"></price-card>',
       'text/html',

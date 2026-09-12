@@ -75,7 +75,7 @@ async function finish(promise: Promise<unknown>, milliseconds = 1500) {
 describe('temporary JavaScript rendering', () => {
   it('owns and schedules cleanup before navigating an inactive muted tab, and waits for stable text', async () => {
     const outcome = await finish(renderRegion(url, '#price'));
-    expect(outcome).toEqual({ value: '$42' });
+    expect(outcome).toEqual({ value: { text: '$42' } });
     expect(create).toHaveBeenCalledWith({ url: 'about:blank', active: false });
     expect(update).toHaveBeenCalledWith(7, {
       url,
@@ -98,7 +98,7 @@ describe('temporary JavaScript rendering', () => {
       ])
       .mockResolvedValueOnce([{ result: { text: 'Loading' } }]);
     expect(await finish(renderRegion(url, '#price'), 2500)).toEqual({
-      value: '$42',
+      value: { text: '$42' },
     });
     expect(executeScript).toHaveBeenCalledTimes(5);
   });
@@ -110,7 +110,7 @@ describe('temporary JavaScript rendering', () => {
     expect(update).not.toHaveBeenCalled();
     expect(session['render-tab:7']).toBe(true);
     tab.status = 'complete';
-    expect(await finish(result, 2000)).toEqual({ value: '$42' });
+    expect(await finish(result, 2000)).toEqual({ value: { text: '$42' } });
     expect(update).toHaveBeenCalledOnce();
   });
 
@@ -126,7 +126,7 @@ describe('temporary JavaScript rendering', () => {
     expect(remove).not.toHaveBeenCalled();
     tab.status = 'complete';
     executeScript.mockResolvedValue([{ result: { text: '$42' } }]);
-    expect(await finish(result, 2000)).toEqual({ value: '$42' });
+    expect(await finish(result, 2000)).toEqual({ value: { text: '$42' } });
   });
 
   it('does not reclaim a tab activated before creation resolves even if inactive again', async () => {
@@ -301,6 +301,6 @@ it('waits for a component that is still being created after page load', async ()
       ),
       2000,
     ),
-  ).toEqual({ value: '$42' });
+  ).toEqual({ value: { text: '$42' } });
   expect(remove).toHaveBeenCalledWith(7);
 });

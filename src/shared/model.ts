@@ -18,6 +18,7 @@ export type Monitor = {
   endsAt: number | null;
   enabled: boolean;
   snapshot: string | null;
+  snapshotHtml?: string | null;
   lastCheckAt: number | null;
   lastChangeAt: number | null;
   error: string | null;
