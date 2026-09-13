@@ -2,7 +2,7 @@
 
 For the complete ordered procedure, use [Package and submit Page Monitor](submit.md).
 
-This folder contains store descriptions, privacy-policy draft, permission answers,
+This folder contains store descriptions, privacy policy, permission answers,
 reviewer instructions and reproducible packaging instructions for Chrome and
 Firefox. Creating these files and ZIPs does not upload, publish or submit an item.
 
@@ -31,8 +31,10 @@ fails unless required configuration and recorded manual checks are present.
   production/signed installs. Supply paid-feature reviewer access privately.
 - Verify native Firefox licensing consent (allow, deny and revoke). Record both
   manual checks in `release.json`; do not mark them true based on mocked tests.
-- Approve the publisher/privacy contact, publish the completed privacy policy on
-  public HTTPS, and set the policy and monitored support URLs in `release.json`.
+- Publish the reviewed privacy policy at
+  `https://jeffreybaird.com/products/page-monitor` and verify it loads publicly.
+  The policy URL and Jeffrey Baird’s contact details are supplied; a monitored
+  public support URL still needs to be set in `release.json`.
 - Choose the application distribution license and add `LICENSE`. ExtPay's upstream
   LICENSE is LGPL-3.0 despite stale AGPL metadata; this does not require assigning
   AGPL to the whole app on that basis. Preserve the shipped notices and provide the
@@ -49,7 +51,7 @@ fails unless required configuration and recorded manual checks are present.
 ## Included documents
 
 - `store-listing.md`: shared copy and browser-specific endings.
-- `privacy-policy.md`: factual policy draft; contact/publication still required.
+- `privacy-policy.md`: reviewed policy with publisher contact; public hosting still requires verification.
 - `privacy-fields.md`: data categories and every permission justification.
 - `reviewer-notes.md`: local fixture walkthrough and private paid-access reminder.
 - `build.md`: ZIP contents, source reproduction and library replacement instructions.

@@ -40,9 +40,10 @@ public URLs, the application license and manual release checks are still incompl
 
 ## 3. Complete the public documents
 
-1. Replace the publisher/contact placeholder in [privacy-policy.md](privacy-policy.md).
-   Review the policy and remove its draft note.
-2. Publish the policy on a public HTTPS page. Verify it loads in a signed-out browser.
+1. Use the reviewed [privacy policy](privacy-policy.md), which includes Jeffrey
+   Baird’s contact details. Keep those details current.
+2. Publish it at `https://jeffreybaird.com/products/page-monitor`. Verify it loads
+   in a signed-out browser.
 3. Publish a monitored support page or contact route.
 4. Choose the application's distribution license and add a root `LICENSE` file.
    Preserve `public/THIRD-PARTY-NOTICES.txt` and `public/licenses/`. ExtPay's upstream
@@ -54,7 +55,7 @@ public URLs, the application license and manual release checks are still incompl
 
    ```json
    {
-     "privacyUrl": "https://your-domain.com/privacy",
+     "privacyUrl": "https://jeffreybaird.com/products/page-monitor",
      "supportUrl": "https://your-domain.com/support",
      "sourceAvailabilityUrl": "https://your-domain.com/page-monitor-source",
      "livePaymentsVerified": false,

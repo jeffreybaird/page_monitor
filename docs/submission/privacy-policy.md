@@ -1,16 +1,19 @@
 # Page Monitor Privacy Policy
 
-Draft for publication. Before use, add the publisher's approved support/privacy
-contact below and publish at a stable, publicly accessible HTTPS URL. Remove this
-draft note before publishing. No hosted policy has been created by this task.
+Effective date: September 13, 2026
 
-Effective date: September 12, 2026
+**Monitored page content and saved change history stay on your device.** Page
+Monitor does not upload your snapshots, HTML previews, selectors or change history
+to the developer, ExtensionPay, Stripe or a cloud monitoring service. Your monitor
+settings and history are stored in your browser profile, not synchronized between
+devices. There is no analytics, advertising or developer-operated monitoring server.
 
-Page Monitor checks selected web-page text in your browser and notifies you when
-it changes. Monitoring happens on your device. Page Monitor has no monitoring
-server, advertising, analytics, or developer-operated account system.
+Monitoring is not entirely offline. Checking a page sends requests to the websites
+you select, and optional payment/licensing uses ExtensionPay and Stripe. Those
+network requests are described below; they do not upload your saved monitoring
+content or history.
 
-## Information used for monitoring
+## Monitoring data stored on your device
 
 Page Monitor saves the names, URLs, selected regions, intervals, durations and
 status of monitors that you create. It stores the latest text snapshot, a bounded
@@ -24,17 +27,21 @@ in session storage. Unfinished forms are separate for each browser window and
 normally last until the browser session ends. Saved monitors remain until deleted
 or extension data is cleared.
 
+## Requests to the websites you monitor
+
 The extension checks the sites you select with your browser's available session.
-Requests go to those sites, which receive ordinary request information such as
-your IP address and applicable cookies. The extension does not copy your site
+Requests go to those sites, which receive the requested URL and ordinary request
+information such as your IP address and applicable cookies. Requesting a monitored
+URL is necessary to retrieve that page; the extension does not send your saved
+monitor configuration or history to the site. The extension does not copy your site
 passwords or cookies into its storage. Sites may have their own privacy practices.
 When JavaScript rendering is needed, a temporary tab runs the site's own code;
 that site's normal network activity can occur. The extension explains this before
 the first rendering check.
 
-Monitor URLs, selectors, snapshots and history are not sent to the developer,
-ExtensionPay or Stripe. The extension does not synchronize monitor data between
-browser profiles or devices.
+The extension does not send your saved monitor URLs, selectors, snapshots or
+history to the developer, ExtensionPay or Stripe. These services do not receive
+the content you monitor.
 
 ## Optional purchases
 
@@ -85,7 +92,13 @@ payment providers operate under their own policies.
 
 ## Contact and updates
 
-Publisher/privacy contact: **PUBLISHER TO SUPPLY BEFORE PUBLICATION**.
+Jeffrey Baird
+
+66 Azalea Rd, Rochester, NY 14620
+
+Email: [jeff@jeffreyleebaird.com](mailto:jeff@jeffreyleebaird.com)
+
+Policy URL: [jeffreybaird.com/products/page-monitor](https://jeffreybaird.com/products/page-monitor)
 
 Material changes to these practices will be reflected in an updated policy and,
 where applicable, in-product disclosures and browser permission requests.
