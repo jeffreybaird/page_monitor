@@ -108,6 +108,7 @@ try {
   await card.getByText('Change history (1)', { exact: true }).click();
   await card.evaluate((node) => node.scrollIntoView({ block: 'start' }));
   const changes = await panel.screenshot();
+  const historyCard = await card.screenshot();
   await panel.getByRole('button', { name: 'New monitor', exact: true }).click();
   await panel
     .getByLabel('Monitor name', { exact: true })
@@ -125,12 +126,12 @@ try {
   await canvas.setViewportSize({ width: 1280, height: 800 });
   const frame = async (screenshot, title, description, notes, filename) => {
     await canvas.setContent(`<!doctype html><html><head><style>
-      *{box-sizing:border-box}body{margin:0;background:#f3f3f1;color:#222;font:16px Arial,sans-serif}
-      header{height:56px;display:flex;align-items:center;justify-content:space-between;padding:0 28px;border-bottom:1px solid #bbb;background:#fff;font-size:16px}
-      header span{font-size:12px;color:#666}main{display:grid;grid-template-columns:1fr 620px;gap:44px;padding:24px 28px;height:744px}
+      *{box-sizing:border-box}body{margin:0;background:#f8f9fa;color:#202124;font:16px system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif}
+      header{height:56px;display:flex;align-items:center;justify-content:space-between;padding:0 28px;border-bottom:1px solid #dadce0;background:#fff;font-size:16px}
+      header span{font-size:12px;color:#5f6368}main{display:grid;grid-template-columns:1fr 620px;gap:44px;padding:24px 28px;height:744px}
       .notes{padding:16px 0}h1{font-size:24px;font-weight:600;margin:0 0 14px;line-height:1.3}p{font-size:16px;line-height:1.6;margin:0 0 28px;max-width:450px}
-      dl{margin:0;border-top:1px solid #b9b9b6;max-width:450px}dt{font-size:13px;color:#666;margin-top:20px}dd{font-size:15px;line-height:1.5;margin:5px 0 20px}code{font:14px ui-monospace,monospace}
-      .footnote{margin-top:32px;font-size:12px;color:#666}.screen{width:620px;height:696px;overflow:hidden;border:1px solid #bbb;background:#fff}.screen img{display:block;width:620px;height:720px}
+      dl{margin:0;border-top:1px solid #dadce0;max-width:450px}dt{font-size:13px;color:#5f6368;margin-top:20px}dd{font-size:15px;line-height:1.5;margin:5px 0 20px}code{font:14px ui-monospace,monospace}
+      .footnote{margin-top:32px;font-size:12px;color:#5f6368}.screen{width:620px;height:696px;overflow:hidden;border:1px solid #dadce0;background:#fff}.screen img{display:block;width:620px;height:720px}
       </style></head><body><header><strong>Page Monitor</strong><span>Chrome extension · Example data</span></header><main><section class="notes"><h1>${title}</h1><p>${description}</p><dl>${notes}</dl><p class="footnote">Actual extension UI. All example URLs and values are synthetic.</p></section><div class="screen"><img src="data:image/png;base64,${screenshot.toString('base64')}"></div></main></body></html>`);
     await canvas.screenshot({ path: join(output, filename) });
   };
@@ -157,13 +158,23 @@ try {
   );
   await canvas.setViewportSize({ width: 440, height: 280 });
   await canvas.setContent(
-    `<!doctype html><style>*{box-sizing:border-box}body{margin:0;background:#efefec;color:#222;font-family:Arial,sans-serif}main{height:280px;padding:26px 28px}header{display:flex;gap:12px;align-items:center;border-bottom:1px solid #aaa;padding-bottom:20px}img{width:32px;height:32px}h1{font-size:24px;font-weight:600;margin:0}p{font-size:16px;line-height:1.6;margin:24px 0}footer{font:13px ui-monospace,monospace;color:#555;border-top:1px solid #aaa;padding-top:16px}</style><main><header><img src="data:image/png;base64,${icon}"><h1>Page Monitor</h1></header><p>DOM text monitoring<br>CSS selectors · Local change history</p><footer>Browser extension / Chrome + Firefox</footer></main>`,
+    `<!doctype html><style>*{box-sizing:border-box}body{margin:0;background:#f8f9fa;color:#202124;font-family:system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif}main{height:280px;padding:26px 28px}header{display:flex;gap:12px;align-items:center;border-bottom:1px solid #dadce0;padding-bottom:20px}img{width:32px;height:32px}h1{font-size:24px;font-weight:600;margin:0}p{font-size:16px;line-height:1.6;margin:24px 0}footer{font:13px ui-monospace,monospace;color:#5f6368;border-top:1px solid #dadce0;padding-top:16px}</style><main><header><img src="data:image/png;base64,${icon}"><h1>Page Monitor</h1></header><p>DOM text monitoring<br>CSS selectors · Local change history</p><footer>Browser extension / Chrome + Firefox</footer></main>`,
   );
   await canvas.screenshot({ path: join(output, 'promo-440x280.png') });
+  await canvas.setViewportSize({ width: 1400, height: 560 });
+  await canvas.setContent(`<!doctype html><html><head><style>
+    *{box-sizing:border-box}body{margin:0;background:#f8f9fa;color:#202124;font-family:system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif}
+    main{height:560px;padding:48px;display:grid;grid-template-columns:560px 1fr;gap:48px;align-items:center}
+    header{display:flex;align-items:center;gap:16px}header img{width:48px;height:48px}h1{font-size:38px;font-weight:600;letter-spacing:-1px;margin:0}
+    h2{font-size:28px;line-height:1.35;font-weight:500;margin:32px 0 16px}p{font-size:18px;color:#5f6368;line-height:1.6;margin:0;max-width:500px}
+    footer{border-top:1px solid #dadce0;margin-top:32px;padding-top:20px;font-size:15px;color:#5f6368}
+    figure{margin:0;min-width:0}figure img{display:block;max-width:100%;max-height:420px;width:auto;margin:auto;border:1px solid #dadce0}figcaption{font-size:12px;color:#5f6368;margin-top:10px;text-align:right}
+    </style></head><body><main><section><header><img src="data:image/png;base64,${icon}"><h1>Page Monitor</h1></header><h2>Track changes in selected page text.</h2><p>CSS selectors. Configurable polling.<br>Text diffs and local change history.</p><footer>Chrome + Firefox · Free with optional $2.99 lifetime license</footer></section><figure><img src="data:image/png;base64,${historyCard.toString('base64')}"><figcaption>Actual extension UI · Example data</figcaption></figure></main></body></html>`);
+  await canvas.screenshot({ path: join(output, 'marquee-1400x560.png') });
   await copyFile('public/icons/128.png', join(output, 'icon-128.png'));
   await writeFile(
     join(output, 'README.txt'),
-    'Store assets use the real compiled Chrome UI in a disposable offline profile, with synthetic example.com data. The temporary store-preview product ID is never packaged for submission. Screenshots: 1280x800. Promo: 440x280. Icon: 128x128.\n',
+    'Store assets use the real compiled Chrome UI in a disposable offline profile, with synthetic example.com data. The temporary store-preview product ID is never packaged for submission. Screenshots: 1280x800. Promo: 440x280. Marquee promo tile: 1400x560. Icon: 128x128.\n',
   );
   console.log(`Store images: ${output}`);
 } finally {

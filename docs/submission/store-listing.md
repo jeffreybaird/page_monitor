@@ -80,7 +80,7 @@ is separate from any Chrome installation.
 ## Images
 
 Run `npm run submission:assets`. `artifacts/submission/assets/` contains a
-440×280 promotional image and 1280×800 screenshots. Screenshots use synthetic
+440×280 promotional image, a 1400×560 marquee promotional tile, and 1280×800 screenshots. Screenshots use synthetic
 build-dashboard and service-status examples in the actual compiled UI. They
 show the actual interface with fixture data and a configured demo product ID.
 They do not show a live payment. Copy the packaged 128×128 icon for the store icon.
