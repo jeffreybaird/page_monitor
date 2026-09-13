@@ -11,7 +11,7 @@ still applies. Screenshots are a future paid feature, not included functionality
 2. Configure exactly one active plan: USD, 299 cents, one-time payment. Enable
    restoration for customers who reinstall or use another browser/device.
 3. Copy `.env.example` to `.env.local` and set `VITE_EXTPAY_EXTENSION_ID` to the
-   registered ExtensionPay ID. It is public configuration, not a secret key.
+   registered ExtensionPay ID: `page-monitor`. It is public configuration, not a secret key.
 4. Run `npm run verify` and `npm run test:e2e`, then load the build. Test an actual
    development purchase and restoration through the registered provider account.
    Production charging requires provider configuration and store distribution;

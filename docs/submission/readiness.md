@@ -25,8 +25,8 @@ fails unless required configuration and recorded manual checks are present.
 
 ## Publisher items still needed
 
-- Registered ExtensionPay product ID with exactly one USD $2.99 one-time plan;
-  set `VITE_EXTPAY_EXTENSION_ID` as described in `../payments.md`.
+- ExtensionPay product ID is configured locally as `page-monitor`. Verify it has
+  exactly one USD $2.99 one-time plan; other checkouts are rejected.
 - Verify actual purchase, restoration, offline access and unpaid/refund behavior on
   production/signed installs. Supply paid-feature reviewer access privately.
 - Verify native Firefox licensing consent (allow, deny and revoke). Record both

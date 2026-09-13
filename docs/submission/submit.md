@@ -27,7 +27,7 @@ public URLs, the application license and manual release checks are still incompl
 4. Create `.env.local` at the repository root. Set its public product ID:
 
    ```dotenv
-   VITE_EXTPAY_EXTENSION_ID=your-registered-extensionpay-id
+   VITE_EXTPAY_EXTENSION_ID=page-monitor
    ```
 
    This is ExtensionPay's product ID, not the Chrome extension ID, Firefox add-on
