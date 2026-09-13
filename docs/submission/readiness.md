@@ -11,7 +11,7 @@ Firefox. Creating these files and ZIPs does not upload, publish or submit an ite
 ```sh
 npm ci
 npm run verify
-npm run test:e2e
+VITE_EXTPAY_EXTENSION_ID='' npm run test:e2e
 GECKODRIVER=/path/to/geckodriver npm run test:e2e:firefox
 npm run lint:firefox
 npm run submission:assets
@@ -25,25 +25,25 @@ fails unless required configuration and recorded manual checks are present.
 
 ## Publisher items still needed
 
-- ExtensionPay product ID is configured locally as `page-monitor`. Verify it has
-  exactly one USD $2.99 one-time plan; other checkouts are rejected.
+- ExtensionPay product ID is configured locally as `page-monitor`. Its public plans endpoint was verified September 13, 2026:
+  exactly one USD $2.99 one-time plan. Other checkouts are rejected.
 - Verify actual purchase, restoration, offline access and unpaid/refund behavior on
   production/signed installs. Supply paid-feature reviewer access privately.
 - Verify native Firefox licensing consent (allow, deny and revoke). Record both
   manual checks in `release.json`; do not mark them true based on mocked tests.
-- Publish the reviewed privacy policy at
-  `https://jeffreybaird.com/products/page-monitor` and verify it loads publicly.
-  The policy URL and Jeffrey Baird’s contact details are supplied; a monitored
-  public support URL still needs to be set in `release.json`.
-- Choose the application distribution license and add `LICENSE`. ExtPay's upstream
+- The reviewed privacy policy is published at
+  `https://jeffreybaird.com/products/page-monitor`. It and the configured contact
+  page returned HTTP 200 on September 13, 2026; the policy content and contact
+  email were checked. `privacyPolicyPublished` is now true.
+- The approved source-available terms are in `LICENSE` and included in both builds.
+  They allow personal/internal use and local modification; redistribution and
+  resale require written permission. ExtPay's upstream
   LICENSE is LGPL-3.0 despite stale AGPL metadata; this does not require assigning
   AGPL to the whole app on that basis. Preserve the shipped notices and provide the
   library source/rebuild materials with distribution.
-- Arrange public access to the appropriate source/rebuild materials: the current
-  GitHub repository is **private** (verified September 12, 2026). An internal
-  repository URL is not a public source offer or support URL. Set
-  `sourceAvailabilityUrl` to the public source/rebuild download. This task does not
-  change repository visibility.
+- Public source is configured as `https://github.com/jeffreybaird/page_monitor`.
+  GitHub's API confirmed public visibility on September 13, 2026. Preserve public
+  access to the corresponding source and rebuild instructions for distributed versions.
 - Review the final images/listing, create or sign into developer accounts, complete
   publisher verification and required store declarations. Choose territories and
   distribution settings. No developer credentials or payment details are stored here.
@@ -84,3 +84,15 @@ first submission because changing it creates a different add-on identity.
   one 440×280 promotional image and the existing 128×128 icon.
 - `package:release` was checked to fail before building while publisher prerequisites
   remain missing. No live provider or store-account action was performed.
+
+## Additional verification September 13, 2026
+
+- GitHub API confirms the source repository is public.
+- ExtensionPay's public current-plans response contains exactly one plan:
+  USD 299 cents, interval `once`. This is not a purchase test.
+- Website deployment `52f6a6b` succeeded. Public policy and contact pages load.
+- The approved application license is bundled as `LICENSE.txt` in both builds;
+  dependency licenses remain separate.
+- `npm run verify` passed: 133 tests, formatting, lint, typecheck and both builds.
+- Native Firefox consent evidence is recorded in `firefox-consent-check.md`.
+  Signed-install and live payment checks remain outstanding.

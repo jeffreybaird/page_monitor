@@ -30,4 +30,6 @@ Bundled as ExtPay's browser API compatibility layer, unmodified.
 
 Source/rebuild materials: supplied in the accompanying submission source ZIP.
 The publisher must make those materials available to recipients when distributing
-the extension. The development repository is private and is not a public source offer.
+the extension. Public application source and dependency replacement/rebuild instructions:
+https://github.com/jeffreybaird/page_monitor
+https://github.com/jeffreybaird/page_monitor/blob/main/docs/submission/build.md

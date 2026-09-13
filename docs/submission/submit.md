@@ -44,27 +44,27 @@ public URLs, the application license and manual release checks are still incompl
    Baird’s contact details. Keep those details current.
 2. Publish it at `https://jeffreybaird.com/products/page-monitor`. Verify it loads
    in a signed-out browser.
-3. Publish a monitored support page or contact route.
-4. Choose the application's distribution license and add a root `LICENSE` file.
+3. Verify `https://jeffreybaird.com/contact` loads and provides a working contact route.
+4. Review the approved source-available terms in the root `LICENSE` file.
    Preserve `public/THIRD-PARTY-NOTICES.txt` and `public/licenses/`. ExtPay's upstream
    LICENSE is LGPL despite stale AGPL package metadata; see [payment notes](../payments.md).
-5. Provide public access to the corresponding source/rebuild materials. The current
-   GitHub repository is private, so its URL is not a public source-download link.
-   You can publish the release source ZIP and rebuild instructions separately.
+5. Provide public access to the corresponding source/rebuild materials. The repository
+   `https://github.com/jeffreybaird/page_monitor` is public. Keep the source and
+   rebuild instructions for each distributed version available.
 6. Fill in [release.json](release.json):
 
    ```json
    {
      "privacyUrl": "https://jeffreybaird.com/products/page-monitor",
-     "supportUrl": "https://your-domain.com/support",
-     "sourceAvailabilityUrl": "https://your-domain.com/page-monitor-source",
+     "supportUrl": "https://jeffreybaird.com/contact",
+     "sourceAvailabilityUrl": "https://github.com/jeffreybaird/page_monitor",
      "livePaymentsVerified": false,
      "firefoxConsentVerified": false,
      "privacyPolicyPublished": false
    }
    ```
 
-   Replace the example URLs with your actual pages. Keep the verification flags
+   Verify these configured URLs load publicly. Keep the verification flags
    false until you have performed the checks below. The packaging script checks
    configuration, not the contents of those pages or the truth of those flags.
 

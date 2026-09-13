@@ -72,12 +72,10 @@ is separate from any Chrome installation.
 
 ## Listing links
 
-- Support URL: set `supportUrl` in `release.json` to a monitored public contact route.
-- Privacy URL: publish the policy in `privacy-policy.md` and set `privacyUrl`.
-- Homepage: optional; do not invent a site.
-- Source repository: currently private. Provide an approved public source/rebuild
-  download location before distribution; do not use the private GitHub URL as a
-  public source offer.
+- Support URL: https://jeffreybaird.com/contact
+- Privacy URL: https://jeffreybaird.com/products/page-monitor
+- Source repository: https://github.com/jeffreybaird/page_monitor
+- Verify public pages load before submission; configuration alone does not prove publication.
 
 ## Images
 

@@ -268,3 +268,11 @@ disclosures, reviewer instructions and outstanding publisher details.
 `npm run package:submission` creates candidate browser/source ZIPs and checksums;
 `npm run package:release` enforces the configured submission prerequisites.
 Neither command publishes or uploads an extension.
+
+## License
+
+Page Monitor is source-available under the [Page Monitor Source-Available License](LICENSE).
+Personal use, internal business use and local modifications are permitted.
+Redistribution, resale and offering it as a service require Jeffrey Baird’s written
+permission. This is not an open-source license. Third-party components retain
+their own licenses; see [third-party notices](public/THIRD-PARTY-NOTICES.txt).

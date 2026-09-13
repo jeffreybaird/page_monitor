@@ -1,0 +1,63 @@
+Page Monitor Source-Available License 1.0
+
+Copyright (c) 2026 Jeffrey Baird. All rights reserved except as expressly granted below.
+
+1. Scope and acceptance
+
+These terms apply to the original Page Monitor application code and documentation
+provided by Jeffrey Baird (the "Licensor"). By exercising the permissions below,
+you agree to these terms. Third-party components are excluded as described in
+section 5.
+
+2. Permitted use
+
+You may view, download, copy, build, run and modify the software for your personal
+use or your organization's internal business use. You may make necessary backup
+copies and allow employees or contractors to use the software solely on your
+behalf for those purposes, subject to these terms. Keep this license and copyright
+notices with copies. No ownership of the software or its trademarks is transferred.
+
+3. Distribution and resale
+
+Without separate written permission from the Licensor, you may not sell, license,
+sublicense, publish, distribute or otherwise provide the software or a modified or
+derivative version to third parties. You may not offer it as a hosted service to
+third parties or bundle it into a product distributed to third parties. Linking
+to the Licensor's official repository or official extension listings is allowed.
+Internal copies permitted by section 2 are not prohibited redistribution.
+
+4. Paid features and official distribution
+
+This source license does not grant a paid entitlement in the official extension.
+The official extension's paid features require the separately offered lifetime
+purchase. The Licensor may distribute the software, authorize browser stores to
+distribute it, and grant separate permissions or commercial licenses. Contact
+jeff@jeffreyleebaird.com to request distribution or resale permission.
+
+5. Third-party rights
+
+Third-party software retains its own licenses, notices and copyright ownership.
+These terms do not restrict rights granted by those licenses, including rights to
+copy, modify, replace or redistribute those components. In particular, you may
+modify the application for your own use and reverse engineer it to debug changes
+to LGPL-covered components. See THIRD-PARTY-NOTICES.txt and the accompanying
+licenses directory in the extension, or public/THIRD-PARTY-NOTICES.txt and
+public/licenses in the source repository, for component notices and license texts.
+Nothing in these terms limits rights that applicable law does not allow to be
+restricted.
+
+6. Termination
+
+If you violate these terms, your permissions under this license terminate.
+Permissions granted directly under third-party licenses are governed by those
+licenses, not this termination provision. Contact the Licensor to request
+reinstatement after correcting a violation.
+
+7. No warranty; limitation of liability
+
+TO THE MAXIMUM EXTENT PERMITTED BY APPLICABLE LAW, THE SOFTWARE IS PROVIDED
+"AS IS", WITHOUT WARRANTIES OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING
+MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. THE
+LICENSOR IS NOT LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY ARISING FROM
+THE SOFTWARE OR ITS USE, WHETHER IN CONTRACT, TORT OR OTHERWISE. THIS SECTION
+DOES NOT EXCLUDE LIABILITY OR CONSUMER RIGHTS THAT CANNOT LAWFULLY BE EXCLUDED.

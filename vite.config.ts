@@ -14,6 +14,16 @@ export default defineConfig(({ mode }) => {
     },
     plugins: [
       {
+        name: 'application-license',
+        async generateBundle() {
+          this.emitFile({
+            type: 'asset',
+            fileName: 'LICENSE.txt',
+            source: await readFile('LICENSE', 'utf8'),
+          });
+        },
+      },
+      {
         name: 'extpay-local-credentials',
         transform(code, id) {
           if (!id.includes('/extpay/dist/')) return;

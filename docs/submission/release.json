@@ -1,8 +1,8 @@
 {
   "privacyUrl": "https://jeffreybaird.com/products/page-monitor",
-  "supportUrl": "",
+  "supportUrl": "https://jeffreybaird.com/contact",
   "livePaymentsVerified": false,
   "firefoxConsentVerified": false,
-  "privacyPolicyPublished": false,
-  "sourceAvailabilityUrl": ""
+  "privacyPolicyPublished": true,
+  "sourceAvailabilityUrl": "https://github.com/jeffreybaird/page_monitor"
 }
