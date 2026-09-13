@@ -258,3 +258,13 @@ Licensing adds access to `https://extensionpay.com/*`. ExtensionPay/Stripe handl
 purchase and restoration data; monitor content stays local. Licensing credentials
 and cached status use local storage. Firefox requests optional licensing data
 consent on supported versions. See [payment data and setup](docs/payments.md).
+
+## Store submission preparation
+
+Follow the [step-by-step packaging and submission guide](docs/submission/submit.md).
+See [submission readiness](docs/submission/readiness.md) for store copy, privacy
+disclosures, reviewer instructions and outstanding publisher details.
+`npm run submission:assets` creates demo screenshots and promotional art.
+`npm run package:submission` creates candidate browser/source ZIPs and checksums;
+`npm run package:release` enforces the configured submission prerequisites.
+Neither command publishes or uploads an extension.

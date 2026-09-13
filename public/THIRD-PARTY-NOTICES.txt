@@ -1,0 +1,33 @@
+Page Monitor — third-party software notices
+
+ExtPay 3.1.2
+Copyright ExtensionPay.com / Glen Chiacchieri and contributors.
+Source: https://github.com/Glench/ExtPay
+Package: https://www.npmjs.com/package/extpay/v/3.1.2
+
+The package.json license and distributed JavaScript header identify
+AGPL-3.0-or-later / AGPLv3. The npm package's LICENSE file contains only
+"LGPL-3.0". The original file is reproduced as licenses/extpay-package-LICENSE.txt.
+Upstream author changed the license to LGPL-3.0 in commit
+38c2d94de5c174e80178e98bf17bb88ef484fe5a (April 26, 2023):
+https://github.com/Glench/ExtPay/commit/38c2d94de5c174e80178e98bf17bb88ef484fe5a
+Full LGPL-3.0 and its referenced GPL-3.0 text accompany this package. This notice
+does not choose a license for the Page Monitor application itself.
+
+Page Monitor modifies the bundled SDK at build time in vite.config.ts:
+- storage.sync operations use storage.local;
+- network calls use an eight-second AbortSignal timeout;
+- restoration waits for popup creation and propagates failures.
+No changes are made to the installed dependency files. Reproducible source and
+build instructions accompany the submission source archive.
+
+webextension-polyfill 0.7.0
+Copyright Mozilla Foundation and contributors.
+Source: https://github.com/mozilla/webextension-polyfill
+License: Mozilla Public License 2.0 (full text in
+licenses/webextension-polyfill-MPL-2.0.txt).
+Bundled as ExtPay's browser API compatibility layer, unmodified.
+
+Source/rebuild materials: supplied in the accompanying submission source ZIP.
+The publisher must make those materials available to recipients when distributing
+the extension. The development repository is private and is not a public source offer.

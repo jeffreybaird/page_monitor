@@ -24,9 +24,11 @@ one-time plan. Price is enforced at checkout; entitlement requires the provider'
 paid status and a one-time plan. Discounts do not invalidate an existing license.
 
 ExtensionPay advertises a 5% transaction fee and uses Stripe processing. Current
-terms and fees: https://extensionpay.com/. The bundled ExtPay 3.1.2 SDK is
-AGPL-3.0-or-later; review its distribution/source obligations before releasing the
-extension. This change does not assign a new license to the project.
+terms and fees: https://extensionpay.com/. ExtPay 3.1.2's LICENSE says LGPL-3.0, following the author's
+[2023 license change](https://github.com/Glench/ExtPay/commit/38c2d94de5c174e80178e98bf17bb88ef484fe5a).
+Its package metadata/header still say AGPL. Preserve the notices and library
+source/rebuild materials supplied in the submission package. This change does not
+assign a new license to the project.
 
 ## Persistence and recovery
 

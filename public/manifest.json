@@ -3,7 +3,7 @@
   "name": "Page Monitor",
   "version": "0.1.0",
   "minimum_chrome_version": "120",
-  "description": "Watch selected page text and get notified when it changes, using your browser session.",
+  "description": "Monitor DOM text with CSS selectors, configurable polling intervals, and local change history.",
   "permissions": [
     "alarms",
     "storage",

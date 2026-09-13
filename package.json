@@ -17,7 +17,10 @@
     "dev:firefox": "vite build --mode firefox --watch",
     "test:e2e:firefox": "npm run build:firefox && node scripts/test-firefox.mjs",
     "package:firefox": "npm run build:firefox && web-ext build --source-dir dist-firefox --artifacts-dir artifacts/firefox --overwrite-dest",
-    "lint:firefox": "npm run build:firefox && web-ext lint --source-dir dist-firefox --no-config-discovery"
+    "lint:firefox": "npm run build:firefox && web-ext lint --source-dir dist-firefox --no-config-discovery",
+    "submission:assets": "node scripts/submission-assets.mjs",
+    "package:submission": "node scripts/package-submission.mjs",
+    "package:release": "node scripts/package-submission.mjs --release"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",
