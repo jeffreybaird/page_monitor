@@ -1,0 +1,37 @@
+{
+  "schema_version": 2,
+  "source_globs": [
+    "src/*.js",
+    "src/*.mjs",
+    "src/*.ts",
+    "src/*.tsx",
+    "src/*.jsx",
+    "src/*.css",
+    "src/*.scss",
+    "src/*.html",
+    "scripts/*.mjs",
+    "scripts/*.js",
+    "scripts/*.ts",
+    "package.json",
+    "package-lock.json",
+    "tsconfig.json",
+    "vite.config.ts",
+    "vitest.config.ts",
+    "playwright.config.ts",
+    "eslint.config.js",
+    "release-config.ts",
+    "release.config.json",
+    "public/manifest.json",
+    "offscreen.html",
+    "sidepanel.html"
+  ],
+  "test_globs": [
+    "tests/**",
+    "**/*_test.py",
+    "**/*.test.js",
+    "**/*.test.ts",
+    "**/*.spec.js",
+    "**/*.spec.ts",
+    "scripts/test-*.mjs"
+  ]
+}
