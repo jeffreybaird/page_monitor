@@ -1,0 +1,16 @@
+{
+  "hooks": {
+    "PreToolUse": [
+      {
+        "hooks": [
+          {
+            "command": "python3 -B /Users/jeffreybaird/src/page_monitor/.codex/hooks/workflow_guard.py --platform codex --root /Users/jeffreybaird/src/page_monitor --policy /Users/jeffreybaird/src/page_monitor/.codex/hooks/policy.json",
+            "timeout": 5,
+            "type": "command"
+          }
+        ],
+        "matcher": ".*"
+      }
+    ]
+  }
+}
