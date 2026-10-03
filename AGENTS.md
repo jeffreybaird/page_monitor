@@ -6,6 +6,7 @@ for both Codex and Claude, and its relevant supporting documents. Keep project
 guidance there; keep this entry point equivalent to the other platform's file.
 
 <!-- BEGIN MANAGED AGENT WORKFLOW -->
+
 Shared native agent workflow version 2.0.0 applies to every behavior
 change. This section supersedes legacy workflow, role-assignment, and blanket
 test-edit approval instructions only. Preserve domain, privacy, coverage,

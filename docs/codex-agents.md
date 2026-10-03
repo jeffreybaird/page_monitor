@@ -110,6 +110,7 @@ the configuration. No extension tests can run until the application and harness
 exist.
 
 <!-- BEGIN MANAGED AGENT WORKFLOW -->
+
 Shared native agent workflow version 2.0.0 applies to every behavior
 change. This section supersedes legacy workflow, role-assignment, and blanket
 test-edit approval instructions only. Preserve domain, privacy, coverage,

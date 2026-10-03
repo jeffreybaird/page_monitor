@@ -12,6 +12,7 @@ imported here. The imports are this file's only difference from `AGENTS.md`.
 @.docs/agent-workflow.md
 
 <!-- BEGIN MANAGED AGENT WORKFLOW -->
+
 Shared native agent workflow version 2.0.0 applies to every behavior
 change. This section supersedes legacy workflow, role-assignment, and blanket
 test-edit approval instructions only. Preserve domain, privacy, coverage,
